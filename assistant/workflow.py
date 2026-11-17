@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -26,9 +27,16 @@ from .adapters.base import (
 from .adapters.registry import create_adapter, detect_platform, platform_label
 
 # 会话时长限制：够用户切到手机上核验即可，避免长时间挂着一个模拟定位。
-DEFAULT_HOLD_SECONDS = 180
+#
+# 上限必须与定位引擎的硬约束一致。实测 ios-location-studio 的
+# POST /api/simulate 只接受 hold_seconds <= 180（181 直接返回 HTTP 422），
+# 因此这里不能声明更大的值——否则助手会发出注定被拒的请求，
+# 用户拿到的是一段 Pydantic 英文校验错误，而不是可理解的提示。
+#
+# 引擎升级后若放宽了上限，用环境变量覆盖，不必改代码。
+MAX_HOLD_SECONDS = int(os.environ.get("WHC_MAX_HOLD_SECONDS", "180"))
 MIN_HOLD_SECONDS = 60
-MAX_HOLD_SECONDS = 1800
+DEFAULT_HOLD_SECONDS = 180
 
 # 唯一允许出现的功能状态表述。刻意不可枚举出「已开通」。
 FEATURE_STATUS_UNVERIFIED = "unknown_pending_user_verification"

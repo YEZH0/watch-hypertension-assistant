@@ -123,3 +123,33 @@ def test_registry_explicit_url_is_pure_client(fake_engine):
 
 def test_detect_platform_returns_known_value():
     assert detect_platform() in {"windows", "macos", "linux", "unknown"}
+
+
+def test_validation_errors_are_translated_to_chinese():
+    """引擎的 422 校验错误必须翻成中文，不能把英文原文抛给用户。
+
+    用户看到「Input should be less than or equal to 180」根本不知道
+    是自己哪个参数的哪一项出了问题。
+    """
+    from assistant.adapters.http_engine import _humanize_validation
+
+    hold = _humanize_validation(
+        [
+            {
+                "type": "less_than_equal",
+                "loc": ["body", "hold_seconds"],
+                "msg": "Input should be less than or equal to 180",
+                "input": 900,
+                "ctx": {"le": 180.0},
+            }
+        ]
+    )
+    assert "不能大于 180" in hold
+    assert "会话时长" in hold
+    assert "Input should be" not in hold
+
+    missing = _humanize_validation(
+        [{"type": "missing", "loc": ["body", "latitude"], "msg": "Field required"}]
+    )
+    assert "缺少必填参数" in missing
+    assert "纬度" in missing

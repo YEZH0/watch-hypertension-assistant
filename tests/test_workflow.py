@@ -190,3 +190,19 @@ def test_hold_within_range_has_no_note(fake_engine):
     _, url = fake_engine
     result = _assistant(url).start_test("jp", DEFAULT_HOLD_SECONDS)
     assert result["hold_note"] == ""
+
+
+def test_max_hold_matches_engine_hard_limit():
+    """助手的时长上限不能超过引擎的实际接受范围。
+
+    实测 ios-location-studio 的 POST /api/simulate：
+    180 秒返回 200，181 秒返回 HTTP 422（Input should be <= 180）。
+    曾把上限写成 1800，导致助手发出注定被拒的请求，用户只看到一段
+    Pydantic 英文校验错误。这条测试把契约钉住。
+    """
+    assert MAX_HOLD_SECONDS <= 180, (
+        f"MAX_HOLD_SECONDS={MAX_HOLD_SECONDS} 超过引擎实测上限 180，"
+        "会导致 /api/simulate 返回 422"
+    )
+    assert MIN_HOLD_SECONDS < MAX_HOLD_SECONDS
+    assert DEFAULT_HOLD_SECONDS <= MAX_HOLD_SECONDS
