@@ -8,9 +8,10 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from PySide6.QtCore import QCoreApplication, QObject, Signal, Slot
 from .engine import Engine
+from .restoration import RESTORE_HINT
 
 PRESETS = {(40.758, -73.9855), (22.2819, 114.1588), (48.8584, 2.2945), (35.6595, 139.7005)}
-RESTORE = '已结束会话；请在 iPhone 地图检查真实定位。未恢复时拔线、等待 GPS 更新，必要时重启并复查。'
+RESTORE = '已结束会话；' + RESTORE_HINT
 
 
 class Controller(QObject):

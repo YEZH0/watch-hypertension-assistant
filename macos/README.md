@@ -15,7 +15,7 @@ git clone https://github.com/YEZH0/watch-hypertension-assistant.git
 cd watch-hypertension-assistant
 # 合并前验证版本：git switch feat/macos
 zsh macos/scripts/install.command
-macos/.venv/bin/python -m assistant --help
+macos/.venv/bin/python -m location_studio_mac.assistant --help
 ```
 
 安装脚本只安装 Python 依赖与公共助手，不触碰设备设置，不下载 MFi 身份。
@@ -24,10 +24,10 @@ macos/.venv/bin/python -m assistant --help
 ## 使用
 
 ```sh
-macos/.venv/bin/python -m assistant env
-macos/.venv/bin/python -m assistant devices
-macos/.venv/bin/python -m assistant check
-macos/.venv/bin/python -m assistant guide
+macos/.venv/bin/python -m location_studio_mac.assistant env
+macos/.venv/bin/python -m location_studio_mac.assistant devices
+macos/.venv/bin/python -m location_studio_mac.assistant check
+macos/.venv/bin/python -m location_studio_mac.assistant guide
 ```
 
 连接且只连接一部 iPhone。解锁手机，按提示信任电脑；在“设置 → 隐私与安全性 → 开发者模式”启用并按手机提示重启确认。
@@ -48,10 +48,10 @@ macos/.venv/bin/python -m location_studio_mac.app --worker dvt_prepare --allow-a
 完成资格核对后，选择固定预设之一：
 
 ```sh
-macos/.venv/bin/python -m assistant start --region hk
+macos/.venv/bin/python -m location_studio_mac.assistant start --region hk
 # 其他选项：us、fr、jp；最长 180 秒，不开放地图或任意坐标。
-macos/.venv/bin/python -m assistant status
-macos/.venv/bin/python -m assistant stop
+macos/.venv/bin/python -m location_studio_mac.assistant status
+macos/.venv/bin/python -m location_studio_mac.assistant stop
 ```
 
 在 iPhone 地图检查是否采纳测试位置；再在健康 App“头像 → 健康检查清单”查找高血压通知，按当前 App 指引核验。
@@ -78,3 +78,9 @@ uv run --no-sync pytest -q
 ```
 
 新项目测试和实机覆盖见 INTEGRATION_TEST_REPORT.md。
+
+## 恢复定位提示
+
+Mac 推荐入口为 `python -m location_studio_mac.assistant`：每次运行都会明确显示恢复提示（JSON 模式写入 stderr），再委托公共助手。直接运行公共 `python -m assistant` 的固定提示暂未包含本 Mac 补充说明。
+
+停止后若回跳缓慢，请打开 iPhone「设置 → 隐私与安全性 → 定位服务」，关闭定位服务，等待约 10 秒后重新开启，再回地图点击定位确认。该建议不保证立即恢复；没有人工确认不能报告恢复成功。
