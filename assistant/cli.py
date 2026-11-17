@@ -23,6 +23,39 @@ def _supports_unicode() -> bool:
     return "utf" in encoding
 
 
+def _ensure_utf8_when_redirected() -> None:
+    """保证中文输出不会因为编码问题让整个命令崩掉。
+
+    背景：真实的 Windows 控制台里 Python 走 WriteConsoleW（UTF-16），
+    中文本来就是好的。但只要输出被重定向——管道、`> log.txt`、
+    CI 日志采集、Git Bash 的 `/dev/null`——编码就可能退化成系统
+    locale（中文系统 cp936、英文系统 cp1252），此时打印「──」「地区」
+    这类字符会抛 UnicodeEncodeError，命令直接死在输出上。
+
+    策略分两种：
+    - 非终端（管道/文件/CI）：切到 UTF-8，日志可读且不乱码。
+    - 终端：保留终端自己的编码，只加 errors="replace"。
+      因为终端编码是用户环境的既定事实，强行改会造成乱码，
+      但绝不能因为一个画线字符就让用户拿不到检查结果。
+    """
+    for stream in (sys.stdout, sys.stderr):
+        if stream is None or not hasattr(stream, "reconfigure"):
+            continue
+        try:
+            encoding = (getattr(stream, "encoding", "") or "").lower().replace("-", "")
+            if encoding == "utf8":
+                continue
+            if stream.isatty():
+                # Windows 的字符设备（包括 MSYS 的 /dev/null）也可能报 isatty=True，
+                # 因此这里不能假设“是终端就一定安全”，仍要兜住。
+                stream.reconfigure(errors="replace")
+            else:
+                stream.reconfigure(encoding="utf-8", errors="replace")
+        except (OSError, ValueError):
+            # 某些被替换过的流对象不支持 reconfigure，忽略即可。
+            pass
+
+
 def _emit_json(payload: Any) -> None:
     text = json.dumps(payload, ensure_ascii=False, indent=2)
     if not _supports_unicode():
@@ -407,6 +440,8 @@ def _cmd_families(as_json: bool) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # 必须在任何输出之前执行：argparse 的报错信息本身也可能含非 ASCII。
+    _ensure_utf8_when_redirected()
     parser = build_parser()
     args = parser.parse_args(argv)
     # 不带子命令时默认执行完整检查。为了让 check 的参数有默认值，

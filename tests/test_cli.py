@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 import json
+import os
+import subprocess
+import sys
+from pathlib import Path
 
 import pytest
 from assistant.cli import main
@@ -104,3 +108,33 @@ def test_readonly_commands_are_safe_on_dead_engine(command, capsys):
     """只读命令在引擎缺失时必须优雅失败，不能抛未捕获异常。"""
     code = main(["--engine-url", "http://127.0.0.1:1", command])
     assert code in (1, 2)
+
+
+def test_redirected_output_survives_non_utf8_locale():
+    """回归测试：stdout 被重定向且编码不是 UTF-8 时，中文输出必须不崩。
+
+    这条对应用户最常见的两种场景：
+    - GitHub Actions 的 Windows runner（默认 cp1252 管道）
+    - 用户自己 `python -m assistant check > log.txt`
+
+    曾经的表现是 UnicodeEncodeError 直接终止进程，用户拿不到任何检查结果。
+    """
+    repo_root = Path(__file__).resolve().parents[1]
+    env = {
+        **os.environ,
+        "PYTHONIOENCODING": "cp1252",  # 强制模拟非 UTF-8 的管道
+        "PYTHONPATH": str(repo_root),
+    }
+    proc = subprocess.run(
+        [sys.executable, "-m", "assistant", "regions"],
+        cwd=repo_root,
+        capture_output=True,  # stdout/stderr 都是管道，不是终端
+        env=env,
+        timeout=120,
+    )
+    stderr = proc.stderr.decode("utf-8", "replace")
+    assert proc.returncode == 0, f"命令应正常退出，实际 stderr：{stderr}"
+    assert "UnicodeEncodeError" not in stderr
+    # 切换后输出应当是合法 UTF-8，否则日志在 CI 里就是乱码
+    text = proc.stdout.decode("utf-8")
+    assert "中国香港" in text
