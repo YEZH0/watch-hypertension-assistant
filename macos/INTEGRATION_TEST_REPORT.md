@@ -4,7 +4,9 @@
 新仓库基线 main @ 963e097940c02edc66ae500d025d489cd3d77f90。
 
 - macOS / arm64，Python 3.13.14；uv sync 成功，公共助手 editable 安装成功。
-- 原始 Mac suite：55 passed；新增桥接 suite 后：59 passed。
+- 原始 Mac suite：55 passed；新增桥接 suite 后：59 passed。公共助手 suite：85 passed。
+- zsh macos/scripts/install.command 实际运行成功，含 uv Python 安装与助手安装。
+- 从根目录直接调用 venv pytest 时，旧 vendor 测试的 env python3 helper 未继承 venv PATH，曾报缺少 cryptography；按文档用 uv run 后 59 项通过。运行测试应使用文档命令。
 - 新测试覆盖固定四预设、DVT 路线、时长限制、停止、连接中取消、无设备 409、脱敏、HTTP health、拒绝浏览器 Origin。
 - 初次合跑因测试先创建 QCoreApplication 导致旧 QWidget 测试退出；测试夹具改用 QApplication 后全部通过。生产桥接仍使用 QCoreApplication。
 - 实际 HTTP 桥接在 127.0.0.1:18900 启动成功；公共助手 env 在线、devices 正常返回未识别 iPhone、status idle、stop idle。
