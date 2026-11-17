@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -26,9 +27,16 @@ from .adapters.base import (
 from .adapters.registry import create_adapter, detect_platform, platform_label
 
 # 会话时长限制：够用户切到手机上核验即可，避免长时间挂着一个模拟定位。
-DEFAULT_HOLD_SECONDS = 180
+#
+# 上限必须与定位引擎的硬约束一致。实测 ios-location-studio 的
+# POST /api/simulate 只接受 hold_seconds <= 180（181 直接返回 HTTP 422），
+# 因此这里不能声明更大的值——否则助手会发出注定被拒的请求，
+# 用户拿到的是一段 Pydantic 英文校验错误，而不是可理解的提示。
+#
+# 引擎升级后若放宽了上限，用环境变量覆盖，不必改代码。
+MAX_HOLD_SECONDS = int(os.environ.get("WHC_MAX_HOLD_SECONDS", "180"))
 MIN_HOLD_SECONDS = 60
-MAX_HOLD_SECONDS = 1800
+DEFAULT_HOLD_SECONDS = 180
 
 # 唯一允许出现的功能状态表述。刻意不可枚举出「已开通」。
 FEATURE_STATUS_UNVERIFIED = "unknown_pending_user_verification"
@@ -91,6 +99,7 @@ class Assistant:
         """
         preset = self._preset_or_error(region_id)
         hold = self._clamp_hold(hold_seconds)
+        hold_note = self._hold_adjustment_note(hold_seconds, hold)
 
         report = self.preflight()
         if not report.can_run_location_test:
@@ -116,6 +125,8 @@ class Assistant:
             "region": preset.to_dict(),
             "session": session.to_dict(),
             "hold_seconds": hold,
+            # 被夹到安全区间时必须说清楚，否则用户以为自己设的是请求值。
+            "hold_note": hold_note,
             "reason": "" if started else (session.error or session.message or "引擎未进入 active 状态"),
             # 无论成功与否都附带这句，避免成功被误读。
             "location_test_does_not_imply": guide.CORE_WARNING,
@@ -173,3 +184,25 @@ class Assistant:
         except (TypeError, ValueError):
             return DEFAULT_HOLD_SECONDS
         return max(MIN_HOLD_SECONDS, min(MAX_HOLD_SECONDS, value))
+
+    @staticmethod
+    def _hold_adjustment_note(requested: Any, effective: int) -> str:
+        """请求值与实际生效值不一致时，给一句人能看懂的说明。
+
+        静默夹取会让用户误以为“我设的就是这个时长”，排查问题时很误导。
+        """
+        try:
+            requested_int = int(requested)
+        except (TypeError, ValueError):
+            return ""
+        if requested_int == effective:
+            return ""
+        if requested_int < MIN_HOLD_SECONDS:
+            return (
+                f"请求的 {requested_int} 秒低于允许的最小值 {MIN_HOLD_SECONDS} 秒，"
+                f"已按 {effective} 秒执行（时长太短会来不及在手机上观察效果）。"
+            )
+        return (
+            f"请求的 {requested_int} 秒超过允许的最大值 {MAX_HOLD_SECONDS} 秒，"
+            f"已按 {effective} 秒执行（长时间挂着模拟定位有风险）。"
+        )

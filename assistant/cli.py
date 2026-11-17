@@ -255,6 +255,8 @@ def _cmd_start(assistant: Assistant, args: argparse.Namespace) -> int:
     region = result["region"]
     _section(f"定位测试 · {region['label']} · {region['city']}")
     print(f"坐标（固定预设）：{region['latitude']}, {region['longitude']}")
+    if result.get("hold_note"):
+        print(f"注意：{result['hold_note']}")
     print()
     print(f"※ {result['region_warning']}")
 

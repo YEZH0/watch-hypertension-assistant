@@ -7,7 +7,12 @@ import json
 import pytest
 from assistant import compat, guide, preflight
 from assistant.adapters.http_engine import HttpLocationEngine
-from assistant.workflow import MAX_HOLD_SECONDS, MIN_HOLD_SECONDS, Assistant
+from assistant.workflow import (
+    DEFAULT_HOLD_SECONDS,
+    MAX_HOLD_SECONDS,
+    MIN_HOLD_SECONDS,
+    Assistant,
+)
 
 
 def _assistant(url: str) -> Assistant:
@@ -165,3 +170,39 @@ def test_guide_forbids_bypassing_conditions():
     payload = guide.render()
     joined = " ".join(payload["never_claim"])
     assert "变通方案" in joined
+
+
+@pytest.mark.parametrize("requested", [-999, 0, 1, 999999])
+def test_hold_clamping_is_explained_not_silent(fake_engine, requested):
+    """时长被夹到安全区间时必须给出说明。
+
+    静默改写用户请求的时长会让人误以为"设的就是这个值"，
+    排查效果时非常误导。
+    """
+    _, url = fake_engine
+    result = _assistant(url).start_test("jp", requested)
+    assert result["hold_note"], "被夹取时必须说明原因，不能静默"
+    assert str(requested) in result["hold_note"]
+
+
+def test_hold_within_range_has_no_note(fake_engine):
+    """请求值本来就在区间内，不需要画蛇添足的提示。"""
+    _, url = fake_engine
+    result = _assistant(url).start_test("jp", DEFAULT_HOLD_SECONDS)
+    assert result["hold_note"] == ""
+
+
+def test_max_hold_matches_engine_hard_limit():
+    """助手的时长上限不能超过引擎的实际接受范围。
+
+    实测 ios-location-studio 的 POST /api/simulate：
+    180 秒返回 200，181 秒返回 HTTP 422（Input should be <= 180）。
+    曾把上限写成 1800，导致助手发出注定被拒的请求，用户只看到一段
+    Pydantic 英文校验错误。这条测试把契约钉住。
+    """
+    assert MAX_HOLD_SECONDS <= 180, (
+        f"MAX_HOLD_SECONDS={MAX_HOLD_SECONDS} 超过引擎实测上限 180，"
+        "会导致 /api/simulate 返回 422"
+    )
+    assert MIN_HOLD_SECONDS < MAX_HOLD_SECONDS
+    assert DEFAULT_HOLD_SECONDS <= MAX_HOLD_SECONDS

@@ -190,6 +190,44 @@ def _parse_session(raw: Any) -> SessionSnapshot:
     )
 
 
+_FIELD_LABELS = {
+    "hold_seconds": "会话时长（秒）",
+    "latitude": "纬度",
+    "longitude": "经度",
+    "udid": "设备标识",
+}
+
+
+def _humanize_validation(items: list[Any]) -> str:
+    """把 Pydantic 的 422 校验错误翻成用户能读懂的中文。
+
+    引擎原样返回的是英文，形如
+    「Input should be less than or equal to 180」，还带着 loc/ctx 结构。
+    直接抛给用户既看不懂，也看不出是自己参数的哪一项出的问题。
+    """
+    parts: list[str] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        loc = [str(x) for x in (item.get("loc") or []) if str(x) != "body"]
+        field = loc[-1] if loc else ""
+        label = _FIELD_LABELS.get(field, field or "请求参数")
+        ctx = item.get("ctx") or {}
+        err_type = str(item.get("type") or "")
+
+        if err_type == "less_than_equal" and "le" in ctx:
+            parts.append(f"{label}不能大于 {ctx['le']:g}")
+        elif err_type == "greater_than_equal" and "ge" in ctx:
+            parts.append(f"{label}不能小于 {ctx['ge']:g}")
+        elif err_type == "missing":
+            parts.append(f"缺少必填参数：{label}")
+        else:
+            msg = str(item.get("msg") or "").strip()
+            parts.append(f"{label}：{msg}" if msg else label)
+
+    return "；".join(dict.fromkeys(parts))
+
+
 def _extract_detail(exc: urllib.error.HTTPError) -> str:
     try:
         body = exc.read().decode("utf-8", "replace")
@@ -198,5 +236,14 @@ def _extract_detail(exc: urllib.error.HTTPError) -> str:
         return f"HTTP {exc.code}"
     if isinstance(parsed, dict):
         detail = parsed.get("detail") or parsed.get("session") or parsed
+        # FastAPI 的 422 校验错误是 list[dict]，优先翻译成中文。
+        if isinstance(detail, list) and all(isinstance(x, dict) for x in detail):
+            readable = _humanize_validation(detail)
+            if readable:
+                return readable
         return json.dumps(detail, ensure_ascii=False)[:300]
+    if isinstance(parsed, list):
+        readable = _humanize_validation(parsed)
+        if readable:
+            return readable
     return str(parsed)[:300]
