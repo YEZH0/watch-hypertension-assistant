@@ -141,6 +141,7 @@ class Assistant:
             "stopped": session.state in ("idle",),
             "session": session.to_dict(),
             "restore_prompt": guide.RESTORE_PROMPT,
+            "restore_force_steps": list(guide.RESTORE_FORCE_STEPS),
             "restore_checklist": list(guide.RESTORE_CHECKLIST),
             "feature_status": FEATURE_STATUS_UNVERIFIED,
         }

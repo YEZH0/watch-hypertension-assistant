@@ -138,3 +138,38 @@ def test_redirected_output_survives_non_utf8_locale():
     # 切换后输出应当是合法 UTF-8，否则日志在 CI 里就是乱码
     text = proc.stdout.decode("utf-8")
     assert "中国香港" in text
+
+
+def test_status_shows_restore_hint_when_idle(fake_engine, capsys):
+    """idle 状态下必须提示关闭定位服务 10 秒再打开。
+
+    会话自然到期时用户不会执行 stop，如果不在这里补提示，
+    用户会带着一个假的模拟位置离开，还以为那就是自己的真实位置。
+    """
+    _, url = fake_engine
+    code = main(["--engine-url", url, "status"])
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "定位服务" in out
+    assert "10 秒" in out
+
+
+def test_status_hides_stale_coordinates_when_idle(fake_engine, capsys):
+    """idle 时不打印裸坐标：引擎会把坐标重置成硬编码默认值，
+    显示出来会让用户误以为自己还停在那个地点。"""
+    _, url = fake_engine
+    main(["--engine-url", url, "status"])
+    out = capsys.readouterr().out
+    assert "状态：idle" in out
+    assert "坐标：" not in out
+
+
+def test_status_shows_coordinates_when_active(fake_engine, capsys):
+    """会话活跃时坐标是有意义的，必须显示。"""
+    _, url = fake_engine
+    main(["--engine-url", url, "start", "--region", "hk", "--hold", "60"])
+    capsys.readouterr()
+    main(["--engine-url", url, "status"])
+    out = capsys.readouterr().out
+    assert "状态：active" in out
+    assert "22.2819" in out

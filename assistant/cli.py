@@ -290,6 +290,10 @@ def _cmd_stop(assistant: Assistant, as_json: bool) -> int:
     _section("已停止定位")
     print(result["restore_prompt"])
     print()
+    print("【必须执行】不做这一步，蓝点不会回到真实位置：")
+    for index, item in enumerate(result["restore_force_steps"], 1):
+        print(f"  {index}. {item}")
+    print()
     print("恢复确认清单：")
     for item in result["restore_checklist"]:
         print(f"  [ ] {item}")
@@ -305,14 +309,22 @@ def _cmd_status(assistant: Assistant, as_json: bool) -> int:
         return 0
     _section("当前会话")
     print(f"状态：{session.state}")
-    if session.latitude is not None:
+    # idle 时引擎会把坐标重置成一个硬编码默认值（实测恒为香港中环），
+    # 不是设备当前真实位置，也不是上次测试的位置。打印出来只会让用户
+    # 以为"我还停在那个地方"，所以只在会话活跃时显示。
+    if session.state == "active" and session.latitude is not None:
         print(f"坐标：{session.latitude}, {session.longitude}")
     if session.remaining is not None:
         print(f"剩余：{int(session.remaining)} 秒")
     if session.message:
-        print(f"说明：{session.message}")
+        print(f"说明：{guide.rewrite_engine_message(session.message)}")
     if session.error:
         print(f"错误：{session.error}")
+    # 会话自然到期时用户不会执行 stop，完整的恢复步骤就看不到了。
+    # 只要当前没有活跃模拟，就在这里补一句，避免用户带着假位置离开。
+    if session.state == "idle":
+        print()
+        print(f"※ {guide.IDLE_RESTORE_HINT}")
     return 0
 
 
