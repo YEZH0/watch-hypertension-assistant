@@ -11,7 +11,8 @@ from .engine import Engine
 from .restoration import RESTORE_HINT
 
 PRESETS = {(40.758, -73.9855), (22.2819, 114.1588), (48.8584, 2.2945), (35.6595, 139.7005)}
-RESTORE = '已结束会话；' + RESTORE_HINT
+RESTORE = '设备会话已结束或需检查；' + RESTORE_HINT
+REQUEST_WAIT_SECONDS = 50
 
 
 class Controller(QObject):
@@ -53,6 +54,8 @@ class Controller(QObject):
             self.state = "error"
             self.error = "无法启动设备操作；请检查依赖与沙箱。"
             self.reply(503, {"detail": self.error})
+            if self.engine.running:
+                self.engine.stop()
             if not call["done"].is_set():
                 call["result"] = (503, {"detail": self.error})
                 call["done"].set()
@@ -113,13 +116,25 @@ class Controller(QObject):
             self.deadline = time.monotonic()+self.duration
             self.message = 'DVT 定位请求已发送；手机位置及健康 App 功能均需人工核验。'
             self.reply(200, self.snapshot())
+        elif name == 'process_exit' and event.get('code', 0) != 0:
+            self.state = 'error'
+            self.error = '设备进程异常退出；未确认清理成功，请核验真实定位。'
+            self.message = RESTORE
+            self.reply(503, {'detail': self.error})
         elif name in ('error', 'process_error', 'dvt_clear_error'):
             self.state = 'error'
-            self.error = 'DVT 操作失败；检查 USB、开发者模式及开发者镜像，并核验真实定位。'
+            self.error = {
+                'DeveloperModeRequired': '请在 iPhone 设置 → 隐私与安全性启用开发者模式并按提示重启确认。',
+                'RequireExactlyOneUSBDevice': '请只连接一部 iPhone，解锁并信任电脑。',
+                'DVTImageRequired': '开发者服务不可用；请检查 Xcode 设备准备，勿自动请求 Apple 票据。',
+            }.get(event.get('type'), 'DVT 操作失败；检查 USB、开发者模式及开发者镜像，并核验真实定位。')
             self.message = RESTORE
             self.reply(409 if event.get('type') == 'RequireExactlyOneUSBDevice' else 503, {'detail': self.error})
 
     def ended(self):
+        if self.action == 'send' and self.state == 'connecting':
+            self.state = 'error'
+            self.error = '设备进程未发送定位请求便结束；请检查连接。'
         if self.state != 'error':
             self.state = 'idle'; self.message = RESTORE
         if self.pending:
@@ -153,7 +168,7 @@ def handler_for(controller):
                 self.send_json(400, {'detail': '无效请求'}); return
             call = {'path': self.path, 'body': body, 'done': threading.Event()}
             controller.request.emit(call)
-            if not call['done'].wait(50):
+            if not call['done'].wait(REQUEST_WAIT_SECONDS):
                 # Stop timed-out work rather than leave a location session unattended.
                 controller.request.emit({'path': '/api/stop', 'body': {}, 'done': threading.Event()})
                 self.send_json(504, {'detail': '操作超时，已请求停止；请检查真实定位。'}); return
