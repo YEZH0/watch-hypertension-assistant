@@ -9,6 +9,7 @@
 | [ADAPTER-CONTRACT.md](ADAPTER-CONTRACT.md) | 五个 HTTP 接口规格 | 接入新平台 / Mac Agent |
 | [LICENSE-BOUNDARY.md](LICENSE-BOUNDARY.md) | MIT 与 GPL 的边界 | 提交任何代码前 |
 | [DEPENDENCIES.md](DEPENDENCIES.md) | 依赖清单与策略 | 装环境 / 升级依赖 |
+| [CI-SETUP.md](CI-SETUP.md) | 启用 GitHub Actions（含手动建文件步骤） | 首次 fork / 令牌权限不足 |
 | [MEDICAL-SAFETY.md](MEDICAL-SAFETY.md) | 医疗安全边界 | 想理解为什么这么设计 |
 
 ## 三分钟了解这个项目

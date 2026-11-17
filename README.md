@@ -1,5 +1,9 @@
 # watch-hypertension-assistant
 
+[![CI](https://github.com/YEZH0/watch-hypertension-assistant/actions/workflows/ci.yml/badge.svg)](https://github.com/YEZH0/watch-hypertension-assistant/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
+
 Apple Watch **高血压通知**兼容性与设置测试助手。
 
 通过**已有的** DVT 定位引擎（Windows / macOS）执行固定地区预设的定位测试，
