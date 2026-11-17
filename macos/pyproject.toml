@@ -1,0 +1,22 @@
+[project]
+name = "ios-location-studio-mac"
+version = "0.1.0"
+description = "Watch Hypertension Assistant macOS DVT bridge"
+requires-python = ">=3.11"
+license = "GPL-3.0-only"
+dependencies = ["accessory-location", "PySide6>=6.8,<7"]
+[project.scripts]
+watch-hypertension-bridge = "location_studio_mac.bridge:main"
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+[tool.hatch.build.targets.wheel]
+packages = ["src/location_studio_mac"]
+[tool.uv.sources]
+accessory-location = {path = "vendor/accessory-location"}
+[dependency-groups]
+dev = ["pytest>=8", "pytest-asyncio>=0.24", "pyinstaller>=6.11"]
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests", "vendor/accessory-location/tests"]
