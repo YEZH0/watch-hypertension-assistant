@@ -1,0 +1,51 @@
+{
+  "note_zh": "第一版只提供这四个固定地区预设，不提供自由经纬度输入。坐标只用于定位测试，不代表也无法改变功能区域可用性。",
+  "critical_warning_zh": "定位模拟改变的是手机报告的地理坐标；苹果的健康功能区域可用性取决于配对 iPhone 的区域设置与 Apple ID 所属地区，二者不是一回事。把手机定位切到某个地区，不会让该地区的健康功能开通，也不能用来验证区域可用性。",
+  "verified_on": "2026-11-17",
+  "presets": [
+    {
+      "id": "us",
+      "region_code": "US",
+      "label": "美国",
+      "city": "纽约 · 时代广场",
+      "latitude": 40.758,
+      "longitude": -73.9855,
+      "availability": "available",
+      "availability_note": "随 watchOS 26 首发地区之一。",
+      "hardware_note": ""
+    },
+    {
+      "id": "hk",
+      "region_code": "HK",
+      "label": "中国香港",
+      "city": "香港 · 中环",
+      "latitude": 22.2819,
+      "longitude": 114.1588,
+      "availability": "available",
+      "availability_note": "首发批次即包含中国香港；中国大陆地区尚未上线，仍在等待监管批准。",
+      "hardware_note": ""
+    },
+    {
+      "id": "fr",
+      "region_code": "FR",
+      "label": "法国",
+      "city": "巴黎 · 埃菲尔铁塔",
+      "latitude": 48.8584,
+      "longitude": 2.2945,
+      "availability": "available",
+      "availability_note": "随欧盟批次上线。",
+      "hardware_note": ""
+    },
+    {
+      "id": "jp",
+      "region_code": "JP",
+      "label": "日本",
+      "city": "东京 · 涩谷十字路口",
+      "latitude": 35.6595,
+      "longitude": 139.7005,
+      "availability": "available",
+      "availability_note": "2025 年 12 月起上线，晚于首批地区。",
+      "hardware_note": "Series 12 / Ultra 4 等新硬件在日本仍需额外监管审批；Series 9–11、Ultra 2–3 不受影响。"
+    }
+  ]
+}

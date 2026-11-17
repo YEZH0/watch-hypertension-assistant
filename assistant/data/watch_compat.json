@@ -1,0 +1,43 @@
+{
+  "feature": {
+    "id": "hypertension_notifications",
+    "label_zh": "高血压通知",
+    "label_en": "Hypertension Notifications",
+    "what_it_does_zh": "基于光学心率传感器数据，分析 30 天内血管对心跳的反应模式；检测到持续慢性高血压迹象时发出提醒。它不测量血压，也不是诊断工具。",
+    "min_watch_os": "26.0",
+    "min_ios": "26.0",
+    "data_window_days": 30,
+    "min_valid_days": 14,
+    "is_diagnostic": false
+  },
+  "eligibility": {
+    "min_age": 22,
+    "exclude_diagnosed_hypertension": true,
+    "exclude_pregnancy": true,
+    "requires_wrist_detection": true,
+    "note_zh": "Apple 官方明确该功能适用于年满 22 岁、先前未被诊断出高血压、且未怀孕的用户；腕部检测需开启。助手不会、也不能替用户绕过这些条件。"
+  },
+  "families": [
+    { "id": "series9",  "label": "Apple Watch Series 9",   "supported": true,  "note": "官方列为支持机型起点" },
+    { "id": "series10", "label": "Apple Watch Series 10",  "supported": true,  "note": "" },
+    { "id": "series11", "label": "Apple Watch Series 11",  "supported": true,  "note": "" },
+    { "id": "series12", "label": "Apple Watch Series 12",  "supported": true,  "note": "新硬件，部分地区仍待额外监管审批" },
+    { "id": "ultra2",   "label": "Apple Watch Ultra 2",    "supported": true,  "note": "官方列为支持机型起点" },
+    { "id": "ultra3",   "label": "Apple Watch Ultra 3",    "supported": true,  "note": "" },
+    { "id": "ultra4",   "label": "Apple Watch Ultra 4",    "supported": true,  "note": "新硬件，部分地区仍待额外监管审批" },
+    { "id": "se2",      "label": "Apple Watch SE（第 2 代）", "supported": false, "note": "Apple 官方支持文档未将 SE 系列列入" },
+    { "id": "se3",      "label": "Apple Watch SE（第 3 代）", "supported": false, "note": "Apple 官方支持文档未将 SE 系列列入" },
+    { "id": "series8",  "label": "Apple Watch Series 8 或更早", "supported": false, "note": "早于 Series 9" },
+    { "id": "ultra1",   "label": "Apple Watch Ultra（第 1 代）", "supported": false, "note": "早于 Ultra 2" },
+    { "id": "unknown",  "label": "不确定 / 稍后核对", "supported": null, "note": "" }
+  ],
+  "provenance": {
+    "verified_on": "2026-11-17",
+    "verified_by": "本仓库维护者人工核对公开资料",
+    "caveat_zh": "机型和区域可用性由 Apple 按监管进度动态调整。本文件是快照，不是权威来源；最终以 Apple 官方「watchOS 功能可用性」页面与 iPhone 健康 App 实际显示为准。",
+    "sources": [
+      "https://support.apple.com/en-us/123002",
+      "https://www.apple.com/watchos/feature-availability/"
+    ]
+  }
+}

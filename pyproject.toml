@@ -1,0 +1,64 @@
+[build-system]
+requires = ["hatchling==1.26.3"]
+build-backend = "hatchling.build"
+
+[project]
+name = "watch-hypertension-assistant"
+version = "0.1.0"
+description = "Apple Watch 高血压通知兼容性与设置测试助手：通过已有 DVT 定位引擎做地区预设定位测试，并指导用户在健康 App 自行核验功能状态。"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "YEZH0" }]
+keywords = ["apple-watch", "hypertension", "dvt", "assistant", "testing"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: MacOS",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+# 运行时零第三方依赖：核心只用标准库（urllib / dataclasses / json）。
+# 定位能力由外部已安装的引擎提供，本仓库不重新实现任何定位协议。
+dependencies = []
+
+[project.optional-dependencies]
+# 开发与测试依赖全部固定版本，避免解析到未经验证的新版本。
+dev = [
+    "pytest==8.3.4",
+    "ruff==0.8.4",
+]
+
+[project.scripts]
+watch-hypertension-assistant = "assistant.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/YEZH0/watch-hypertension-assistant"
+Issues = "https://github.com/YEZH0/watch-hypertension-assistant/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["assistant"]
+
+[tool.hatch.build.targets.sdist]
+include = ["assistant", "tests", "docs", "README.md", "LICENSE", "NOTICE.md"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+pythonpath = ["."]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["assistant", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B011"]

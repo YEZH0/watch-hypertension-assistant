@@ -1,0 +1,175 @@
+"""助手主流程：把平台识别、前置检查、兼容性、地区预设、定位测试串起来。
+
+设计上刻意保持「一步一件事」，且每一步都能单独输出，便于用户在终端里逐步确认。
+不追求架构上的优雅：这是最小可运行版本。
+
+三条贯穿全流程的不变量（有测试保护）：
+1. 任何输出都不包含「高血压通知已开通/已生效」这类断言；
+2. 兼容性结论只有三值，未知就是未知；
+3. 定位测试失败时不会给出「再来一次也许就好了」的模糊建议，只报告真实原因。
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Any
+
+from . import compat, guide, preflight, regions
+from .adapters.base import (
+    AdapterUnavailable,
+    CompatReport,
+    EngineStatus,
+    LocationEngine,
+    RegionPreset,
+    SessionSnapshot,
+)
+from .adapters.registry import create_adapter, detect_platform, platform_label
+
+# 会话时长限制：够用户切到手机上核验即可，避免长时间挂着一个模拟定位。
+DEFAULT_HOLD_SECONDS = 180
+MIN_HOLD_SECONDS = 60
+MAX_HOLD_SECONDS = 1800
+
+# 唯一允许出现的功能状态表述。刻意不可枚举出「已开通」。
+FEATURE_STATUS_UNVERIFIED = "unknown_pending_user_verification"
+
+
+@dataclass
+class Assistant:
+    engine_url: str | None = None
+    platform_name: str | None = None
+    _engine: LocationEngine | None = field(default=None, repr=False)
+
+    @property
+    def platform(self) -> str:
+        return self.platform_name or detect_platform()
+
+    @property
+    def engine(self) -> LocationEngine:
+        if self._engine is None:
+            self._engine = create_adapter(self.platform, self.engine_url)
+        return self._engine
+
+    # ------------------------------------------------------------ 阶段一
+
+    def environment(self) -> dict[str, Any]:
+        """平台识别 + 引擎探测。"""
+        platform = self.platform
+        try:
+            status: EngineStatus = self.engine.probe()
+            engine_payload = status.to_dict()
+        except AdapterUnavailable as exc:
+            engine_payload = {
+                "available": False,
+                "platform": platform,
+                "engine": "n/a",
+                "detail": str(exc),
+                "hint": exc.hint,
+            }
+        return {
+            "platform": platform,
+            "platform_label": platform_label(platform),
+            "engine": engine_payload,
+        }
+
+    # ------------------------------------------------------------ 阶段二
+
+    def preflight(self) -> preflight.PreflightReport:
+        return preflight.run(self.engine, self.platform)
+
+    def compatibility(self, inputs: compat.UserInputs | None = None) -> CompatReport:
+        return compat.check(inputs or compat.UserInputs())
+
+    # ------------------------------------------------------------ 阶段三
+
+    def start_test(
+        self, region_id: str, hold_seconds: int = DEFAULT_HOLD_SECONDS
+    ) -> dict[str, Any]:
+        """启动一次地区预设定位测试。
+
+        前置条件不满足时**不会**尝试强行启动，而是把阻断项原样返回。
+        """
+        preset = self._preset_or_error(region_id)
+        hold = self._clamp_hold(hold_seconds)
+
+        report = self.preflight()
+        if not report.can_run_location_test:
+            # 即使没启动成功，也要把"定位≠功能状态"和"定位≠区域可用性"两条警告带上：
+            # 用户在失败场景下更容易产生"再试一次就能开通"的误解。
+            return {
+                "started": False,
+                "region": preset.to_dict(),
+                "reason": "前置检查未通过，未启动定位测试。",
+                "blocking_items": [
+                    item.to_dict() for item in report.items if item.passed is False and item.blocking
+                ],
+                "location_test_does_not_imply": guide.CORE_WARNING,
+                "feature_status": FEATURE_STATUS_UNVERIFIED,
+                "region_warning": regions.critical_warning(),
+                "verification_guide": guide.render(location_test_passed=False),
+            }
+
+        session = self.engine.start_location(preset.latitude, preset.longitude, hold)
+        started = session.state == "active"
+        return {
+            "started": started,
+            "region": preset.to_dict(),
+            "session": session.to_dict(),
+            "hold_seconds": hold,
+            "reason": "" if started else (session.error or session.message or "引擎未进入 active 状态"),
+            # 无论成功与否都附带这句，避免成功被误读。
+            "location_test_does_not_imply": guide.CORE_WARNING,
+            "feature_status": FEATURE_STATUS_UNVERIFIED,
+            "region_warning": regions.critical_warning(),
+            "verification_guide": guide.render(location_test_passed=started),
+        }
+
+    def stop_test(self) -> dict[str, Any]:
+        session = self.engine.stop_location()
+        return {
+            "stopped": session.state in ("idle",),
+            "session": session.to_dict(),
+            "restore_prompt": guide.RESTORE_PROMPT,
+            "restore_checklist": list(guide.RESTORE_CHECKLIST),
+            "feature_status": FEATURE_STATUS_UNVERIFIED,
+        }
+
+    def session(self) -> SessionSnapshot:
+        return self.engine.session()
+
+    # ------------------------------------------------------------ 报告
+
+    def full_report(self, inputs: compat.UserInputs | None = None) -> dict[str, Any]:
+        """一次性输出完整检查报告（不启动定位）。"""
+        env = self.environment()
+        pre = self.preflight()
+        compat_report = self.compatibility(inputs)
+        return {
+            "platform": env,
+            "preflight": pre.to_dict(),
+            "compatibility": compat_report.to_dict(),
+            "regions": [preset.to_dict() for preset in regions.presets()],
+            "region_warning": regions.critical_warning(),
+            "feature_status": FEATURE_STATUS_UNVERIFIED,
+            "core_warning": guide.CORE_WARNING,
+        }
+
+    # ------------------------------------------------------------ 辅助
+
+    def _preset_or_error(self, region_id: str) -> RegionPreset:
+        try:
+            return regions.get(region_id)
+        except KeyError as exc:
+            raise AdapterUnavailable(
+                str(exc).strip("'\""),
+                hint=f"可选地区：{', '.join(p.id for p in regions.presets())}",
+            ) from exc
+
+    @staticmethod
+    def _clamp_hold(hold_seconds: int) -> int:
+        """把时长夹到安全区间。不允许 0 或无限长——挂着模拟定位有实际风险。"""
+        try:
+            value = int(hold_seconds)
+        except (TypeError, ValueError):
+            return DEFAULT_HOLD_SECONDS
+        return max(MIN_HOLD_SECONDS, min(MAX_HOLD_SECONDS, value))
