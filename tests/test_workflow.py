@@ -206,3 +206,26 @@ def test_max_hold_matches_engine_hard_limit():
     )
     assert MIN_HOLD_SECONDS < MAX_HOLD_SECONDS
     assert DEFAULT_HOLD_SECONDS <= MAX_HOLD_SECONDS
+
+
+def test_stop_must_include_location_service_restart_step(fake_engine):
+    """停止定位后必须给出「关闭定位服务 10 秒再打开」的强制步骤。
+
+    iOS 的 locationd 会缓存最近一次定位结果，停止模拟后缓存不会自动失效，
+    蓝点会一直停在模拟地点。不提示这一步，用户会误以为模拟没停止，
+    甚至误以为自己真的在那个位置——这是安全层面的误导，不是体验问题。
+    """
+    _, url = fake_engine
+    assistant = _assistant(url)
+    assistant.start_test("jp", 60)
+    result = assistant.stop_test()
+
+    assert result["restore_force_steps"], "强制恢复步骤不能为空"
+    joined = "\n".join(result["restore_force_steps"])
+    assert "定位服务" in joined
+    assert "10 秒" in joined
+    assert "关闭" in joined
+    assert "重新打开" in joined
+
+    checklist = "\n".join(result["restore_checklist"])
+    assert "定位服务" in checklist and "10 秒" in checklist

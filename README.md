@@ -51,9 +51,13 @@ python -m assistant start --region hk
 结束后一定要：
 
 ```bash
-python -m assistant stop     # 停止并恢复真实位置
+python -m assistant stop     # 停止定位，并给出恢复真实位置的步骤
 python -m assistant guide    # 在健康 App 里实际核验
 ```
+
+> **停止后位置不会自己回来。** iOS 会缓存上一次的定位结果，必须到
+> 「设置 → 隐私与安全性 → 定位服务」把总开关**关闭 10 秒**再打开，蓝点才会回到真实位置。
+> `stop` 会把这几步完整打印出来。
 
 ---
 
@@ -87,7 +91,7 @@ pip install -e ".[dev]"     # 仅装测试工具，固定版本
 | `compat` | 只做兼容性检查 |
 | `check` | 完整检查（默认命令，不启动定位） |
 | `start --region hk` | 按预设启动定位测试 |
-| `stop` | 停止并提示恢复真实位置 |
+| `stop` | 停止定位，并给出恢复真实位置的步骤（含关闭定位服务 10 秒） |
 | `status` | 查询当前会话 |
 | `guide` | 健康 App 人工核验指引 |
 
