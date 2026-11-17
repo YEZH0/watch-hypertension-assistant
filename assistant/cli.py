@@ -9,9 +9,10 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from pathlib import Path
 from typing import Any
 
-from . import __version__, compat, guide, regions
+from . import __version__, compat, guide, regions, textui, wizard
 from .adapters.base import AdapterError, AdapterUnavailable
 from .workflow import DEFAULT_HOLD_SECONDS, Assistant
 
@@ -65,8 +66,7 @@ def _emit_json(payload: Any) -> None:
 
 
 def _section(title: str) -> None:
-    print()
-    print(f"── {title} " + "─" * max(0, 52 - len(title)))
+    textui.section(title)
 
 
 def _ok(flag: bool | None) -> str:
@@ -113,15 +113,35 @@ def _print_guide() -> None:
     for step in payload["setup_steps"]:
         print(f"  {step['order']}. {step['action']}")
         print(f"     → {step['expect']}")
+
+    absent = payload["card_absent"]
+    print()
+    print(f"{absent['title']}：")
+    for item in absent["possible_causes"]:
+        print(f"  - {item}")
+    print(f"  ⇒ {absent['conclusion']}")
+
     print()
     print("核验步骤：")
     for step in payload["verification_steps"]:
         print(f"  {step['order']}. {step['action']}")
         print(f"     → {step['expect']}")
+
+    print()
+    print("官方依据：")
+    for item in payload["official_links"]:
+        print(f"  - {item['label']}")
+        print(f"    {item['url']}")
+
     print()
     print("禁止事项：")
     for text in payload["never_claim"]:
         print(f"  - {text}")
+
+    print()
+    print("三个互相独立的状态（不要互相推断）：")
+    for item in payload["state_separation"]:
+        print(f"  - {item['label']}：{item['meaning']}（{item['who_can_verify']}）")
 
 
 # ---------------------------------------------------------------- 各子命令
@@ -269,15 +289,28 @@ def _cmd_start(assistant: Assistant, args: argparse.Namespace) -> int:
 
     session = result["session"]
     print()
-    print(f"已启动，模拟定位在手机上生效（剩余约 {int(session.get('remaining') or result['hold_seconds'])} 秒）。")
+    print(
+        f"引擎已接受请求，会话状态：{session.get('state')}"
+        f"（剩余约 {int(session.get('remaining') or result['hold_seconds'])} 秒）。"
+    )
     print()
-    print("现在请在 iPhone 上做这两件事：")
-    print("  1. 打开「地图」App，确认蓝点已在你选择的地区。")
-    print("  2. 按下面的步骤核验功能状态——定位改动不会改变功能状态。")
+    # 历史版本这里写「模拟定位在手机上生效」，属于误报：引擎只知道自己的请求发成功了。
+    print("这句话很容易被误读，所以说清楚：")
+    print("  active 只代表引擎认为请求已经下发；手机有没有采用这个坐标，助手无法判定。")
+    print()
+    print("现在请在 iPhone 上确认：")
+    print("  1. 打开「地图」App，点一下右下角定位按钮，让它重新取一次位置。")
+    print("  2. 看蓝点是否真的到了上面这个坐标。")
+    print("  3. 如果没动：先运行 `watch-hypertension-assistant status` 看会话是否还活着，")
+    print("     再按 docs/FAQ.md 的「地图蓝点没动」逐项排查（先查线缆、解锁、定位权限）。")
+    print()
+    print("然后去健康 App 核验功能状态——这一步与定位结果无关：")
+    print("  watch-hypertension-assistant guide")
     print()
     print(f"※ {result['location_test_does_not_imply']}")
     print()
     print("到时间或需要提前结束，运行：watch-hypertension-assistant stop")
+    print("想要全程带着确认节点走完 0–8 步：watch-hypertension-assistant wizard")
     return 0
 
 
@@ -290,11 +323,15 @@ def _cmd_stop(assistant: Assistant, as_json: bool) -> int:
     _section("已停止定位")
     print(result["restore_prompt"])
     print()
-    print("【必须执行】不做这一步，蓝点不会回到真实位置：")
-    for index, item in enumerate(result["restore_force_steps"], 1):
-        print(f"  {index}. {item}")
+    print("按顺序确认（前一步有效，就不必做后面的）：")
+    for step in result["restore_steps"]:
+        when = f"［{step['when']}时］" if step["when"] else ""
+        print(f"  {step['order']}. {when}{step['action']}")
+        print(f"     → {step['expect']}")
     print()
-    print("恢复确认清单：")
+    print(f"※ {result['restore_note']}")
+    print()
+    print("恢复确认清单（只能由你在手机上确认）：")
     for item in result["restore_checklist"]:
         print(f"  [ ] {item}")
     print()
@@ -314,6 +351,7 @@ def _cmd_status(assistant: Assistant, as_json: bool) -> int:
     # 以为"我还停在那个地方"，所以只在会话活跃时显示。
     if session.state == "active" and session.latitude is not None:
         print(f"坐标：{session.latitude}, {session.longitude}")
+        print("※ 这是引擎下发的模拟坐标；手机是否采用，需要你在苹果地图里看蓝点。")
     if session.remaining is not None:
         print(f"剩余：{int(session.remaining)} 秒")
     if session.message:
@@ -325,6 +363,143 @@ def _cmd_status(assistant: Assistant, as_json: bool) -> int:
     if session.state == "idle":
         print()
         print(f"※ {guide.IDLE_RESTORE_HINT}")
+    return 0
+
+
+# ---------------------------------------------------------------- 向导
+
+
+def _print_plan(payload: dict[str, Any]) -> None:
+    _section("全流程引导（第 0–8 步）")
+    print("每一阶段都会停下来等你明确确认，助手不会自己往下走。")
+    for stage in payload["stages"]:
+        print()
+        print(f"第 {stage['index']} 步 · {stage['title']}")
+        print(f"  目的：{stage['goal']}")
+        if stage["touches_location"]:
+            print("  ※ 这一步会改变手机报告的位置。")
+        if stage["answers"]:
+            labels = " / ".join(f"{item['label']}({item['value']})" for item in stage["answers"])
+            print(f"  需要你回答：{labels}")
+    print()
+    print("三个互相独立的状态（禁止互相推断）：")
+    for item in payload["state_separation"]:
+        print(f"  - {item['label']}：{item['meaning']}（{item['who_can_verify']}）")
+    print()
+    print("用法：")
+    for key, value in payload["usage"].items():
+        print(f"  {key}: {value}")
+    print()
+    print(f"※ {payload['privacy_note']}")
+    print(f"※ {payload['core_warning']}")
+
+
+def _print_wizard_status(payload: dict[str, Any]) -> None:
+    state = payload["state"]
+    _section("向导进度")
+    print(f"进度文件：{payload['state_file']}")
+    print(f"当前阶段：第 {state['stage_index']}/{state['total_stages']} 步 · {state['stage']}")
+    print(f"已完成：{', '.join(state['completed']) or '（还没开始）'}")
+    if state["region"]:
+        print(f"测试点：{state['region']}（引擎 active 仅代表请求已下发）")
+    if state["map_verification"]:
+        print(f"地图核验：{state['map_verification']}（用户自述）")
+    if state["health_result"]:
+        print(f"健康 App：{state['health_result']}（用户自述）")
+    if state["restore_result"]:
+        print(f"位置恢复：{state['restore_result']}")
+    if payload["finished"]:
+        print()
+        wizard.render_report(payload["report"])
+    else:
+        print()
+        print("继续：python -m assistant wizard")
+
+
+def _cmd_wizard(args: argparse.Namespace) -> int:
+    state_path = Path(args.state_file) if args.state_file else Path.cwd() / wizard.STATE_FILENAME
+    inputs = compat.UserInputs(
+        watch_family=args.watch,
+        watch_os=args.watchos,
+        ios_version=args.ios,
+        age=args.age,
+        diagnosed_hypertension=_tri(args.hypertension),
+        pregnant=_tri(args.pregnant),
+        wrist_detection=_tri(args.wrist_detection),
+    )
+    assistant = Assistant(engine_url=args.engine_url)
+    wiz = wizard.Wizard(
+        assistant=assistant,
+        state_path=state_path,
+        inputs=inputs,
+        hold_seconds=args.hold,
+    )
+
+    if args.reset:
+        wiz.reset()
+        if args.json:
+            _emit_json({"reset": True, "state_file": str(state_path)})
+        else:
+            print("已清空向导进度。下次运行将从第 0 步开始。")
+        return 0
+
+    if args.plan:
+        payload = wiz.plan()
+        if args.json:
+            _emit_json(payload)
+        else:
+            _print_plan(payload)
+        return 0
+
+    if args.status:
+        payload = wiz.status()
+        if args.json:
+            _emit_json(payload)
+        else:
+            _print_wizard_status(payload)
+        return 0
+
+    # 回答某个阶段：Agent / 脚本用它推进，等价于交互模式下的一次确认。
+    if args.answer:
+        try:
+            result = wiz.submit(args.answer, stage_id=args.stage)
+        except wizard.WizardError as exc:
+            print(f"错误：{exc}", file=sys.stderr)
+            return wizard.EXIT_USAGE
+        if args.json:
+            _emit_json(result)
+        else:
+            wizard.render_resolution(result)
+            # 无论推进、被阻断还是等用户确认，都把「当前该做什么 + 怎么回答」再摆一次。
+            # 被阻断时尤其重要：用户处理完问题需要知道重试的命令是什么。
+            if result.get("next"):
+                print()
+                wizard.render_description(result["next"], interactive=False)
+        return int(result["exit_code"])
+
+    # 只描述某个阶段，不做任何动作。
+    if args.stage:
+        try:
+            payload = wiz.describe(args.stage)
+        except KeyError:
+            print(f"错误：未知阶段 {args.stage!r}；可选：{', '.join(wizard.STAGE_ORDER)}", file=sys.stderr)
+            return wizard.EXIT_USAGE
+        if args.json:
+            _emit_json(payload)
+        else:
+            wizard.render_description(payload, interactive=sys.stdin.isatty())
+        return 0
+
+    interactive = sys.stdin.isatty() and not args.json
+    if interactive:
+        return wizard.run_interactive(wiz)
+
+    # 非交互（Agent 通过管道调用）：只报告当前阶段与如何确认，绝不擅自推进。
+    payload = wiz.describe()
+    if args.json:
+        _emit_json(payload)
+    else:
+        wizard.render_description(payload, interactive=False)
     return 0
 
 
@@ -364,6 +539,12 @@ def build_parser() -> argparse.ArgumentParser:
         json=False,
         region=None,
         hold=DEFAULT_HOLD_SECONDS,
+        plan=False,
+        status=False,
+        stage=None,
+        answer=None,
+        reset=False,
+        state_file=None,
     )
 
     def add_compat_flags(target: argparse.ArgumentParser) -> None:
@@ -423,6 +604,29 @@ def build_parser() -> argparse.ArgumentParser:
     p_guide = sub.add_parser("guide", help="健康 App 人工核验指引")
     p_guide.add_argument("--json", action="store_true")
 
+    p_wizard = sub.add_parser(
+        "wizard",
+        help="全流程引导（0–8 步），每步等待用户明确确认；可中断、可继续",
+    )
+    add_compat_flags(p_wizard)
+    p_wizard.add_argument("--plan", action="store_true", help="只打印 0–8 步全流程，不做任何动作")
+    p_wizard.add_argument("--status", action="store_true", help="查看当前进度")
+    p_wizard.add_argument("--stage", default=None, help="指定阶段 id（usb / baseline / region …）")
+    p_wizard.add_argument("--answer", default=None, help="提交当前阶段的确认值")
+    p_wizard.add_argument("--reset", action="store_true", help="清空进度，从第 0 步重新开始")
+    p_wizard.add_argument(
+        "--hold",
+        type=int,
+        default=DEFAULT_HOLD_SECONDS,
+        help=f"定位会话保持秒数（默认 {DEFAULT_HOLD_SECONDS}）",
+    )
+    p_wizard.add_argument(
+        "--state-file",
+        default=None,
+        help=f"进度文件路径（默认当前目录下的 {wizard.STATE_FILENAME}）",
+    )
+    p_wizard.add_argument("--json", action="store_true")
+
     return parser
 
 
@@ -476,6 +680,8 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 _print_guide()
             return 0
+        if command == "wizard":
+            return _cmd_wizard(args)
 
         assistant = Assistant(engine_url=args.engine_url)
 

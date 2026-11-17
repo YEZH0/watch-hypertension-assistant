@@ -208,24 +208,39 @@ def test_max_hold_matches_engine_hard_limit():
     assert DEFAULT_HOLD_SECONDS <= MAX_HOLD_SECONDS
 
 
-def test_stop_must_include_location_service_restart_step(fake_engine):
-    """停止定位后必须给出「关闭定位服务 10 秒再打开」的强制步骤。
+def test_stop_still_offers_location_service_restart_but_conditionally(fake_engine):
+    """停止定位后仍要给出「关闭定位服务约 10 秒」的指引，但必须是**条件**步骤。
 
-    iOS 的 locationd 会缓存最近一次定位结果，停止模拟后缓存不会自动失效，
-    蓝点会一直停在模拟地点。不提示这一步，用户会误以为模拟没停止，
-    甚至误以为自己真的在那个位置——这是安全层面的误导，不是体验问题。
+    两种情况都要防：
+    - 把这一步删掉：部分设备确实会一直停在模拟点，用户不知道怎么恢复；
+    - 把它写成「必须做，否则一定恢复不了」：已经恢复的人会去做无谓的破坏性操作
+      （关闭定位服务会打断导航、轨迹记录等正在使用定位的 App）。
+
+    因此断言分两面：指引存在，且带触发条件、不再使用绝对化措辞。
     """
     _, url = fake_engine
     assistant = _assistant(url)
     assistant.start_test("jp", 60)
     result = assistant.stop_test()
 
-    assert result["restore_force_steps"], "强制恢复步骤不能为空"
     joined = "\n".join(result["restore_force_steps"])
     assert "定位服务" in joined
     assert "10 秒" in joined
     assert "关闭" in joined
-    assert "重新打开" in joined
+
+    # 结构化的新字段把它标成条件步骤，并注明可能让模拟失效。
+    step = next(item for item in result["restore_steps"] if "定位服务" in item["action"])
+    assert step["conditional"] is True
+    assert step["when"], "必须写清在什么情况下才需要做这一步"
+    assert step["may_break_simulation"] is True
+
+    # 不允许出现绝对化断言。
+    assert "必须关闭" not in joined
+    assert "否则" not in joined
+    assert "一定无法恢复" not in joined
+    assert "不做这步位置不会恢复" not in joined
 
     checklist = "\n".join(result["restore_checklist"])
-    assert "定位服务" in checklist and "10 秒" in checklist
+    assert "定位服务" in checklist
+    assert "10 秒" in checklist
+    assert "只能由你自己确认" in checklist
