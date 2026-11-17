@@ -57,6 +57,9 @@ def test_no_device_and_redaction(controller):
     controller.engine.running = False
     devices = call(controller, '/api/devices')
     controller.consume({'event':'device_ready','ios':'26.1','model':'iPhone17,3','udid':'secret'})
+    assert not devices['done'].is_set()
+    controller.engine.running = False
+    controller.ended()
     assert devices['result'][1]['devices'][0]['udid'] == 'usb-current'
     assert 'secret' not in json.dumps(devices['result'])
 

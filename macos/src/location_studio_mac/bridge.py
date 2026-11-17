@@ -29,6 +29,7 @@ class Controller(QObject):
         self.deadline = 0
         self.pending = None
         self.action = None
+        self.device_result = None
 
     def snapshot(self):
         result = {'state': self.state, 'message': self.message, 'error': self.error,
@@ -78,7 +79,7 @@ class Controller(QObject):
         if self.engine.running or self.pending:
             respond(409, {'detail': '已有设备操作，请先停止。'}); return
         if path == '/api/devices':
-            self.pending = call; self.action = 'device'
+            self.pending = call; self.action = 'device'; self.device_result = None
             self.engine.start('device', route='dvt'); return
         if path == '/api/simulate':
             try:
@@ -101,10 +102,10 @@ class Controller(QObject):
     def consume(self, event):
         name = event.get('event')
         if name == 'device_ready':
-            self.reply(200, {'connected': True, 'devices': [
-                {'udid': 'usb-current', 'name': 'iPhone', 'ios_version': event.get('ios'), 'model': event.get('model')}], 'error': None})
+            self.device_result = {'connected': True, 'devices': [
+                {'udid': 'usb-current', 'name': 'iPhone', 'ios_version': event.get('ios'), 'model': event.get('model')}], 'error': None}
         elif name in ('device_count', 'device_error'):
-            self.reply(200, {'connected': False, 'devices': [], 'error': '请只连接一部 iPhone，解锁并信任此电脑。'})
+            self.device_result = {'connected': False, 'devices': [], 'error': '请只连接一部 iPhone，解锁并信任此电脑。'}
         elif name == 'dvt_set_sent':
             if self.state != 'connecting': return
             self.state = 'active'
@@ -122,7 +123,7 @@ class Controller(QObject):
             self.state = 'idle'; self.message = RESTORE
         if self.pending:
             if self.action == 'device' and self.state != 'stopping':
-                self.reply(200, {'connected': False, 'devices': [], 'error': '未能识别 iPhone。'})
+                self.reply(200, self.device_result or {'connected': False, 'devices': [], 'error': '未能识别 iPhone。'})
             else:
                 self.reply(200 if self.state == 'idle' else 503, self.snapshot())
         self.action = None
