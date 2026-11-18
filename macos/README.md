@@ -1,92 +1,86 @@
-# macOS 适配器（待 Mac Agent 实现）
+# Watch Hypertension Assistant — macOS
 
-> **状态：契约已冻结，实现待完成。**
-> 本目录由 Mac Agent 从 `main` 创建 `feat/macos` 分支后负责，Windows Agent 不修改本目录内容。
+本目录 GPL-3.0-only，无担保；完整许可证见 LICENSE，可按该许可证复制和修改。
+仅提供源码。使用公共助手的简洁命令行界面，不制作 APP/DMG。
 
-## 许可证：GPL-3.0-only
+工具会暂时模拟 iPhone 位置，不能保证启用地区受限的高血压通知功能。
+不得绕过设备、年龄或健康资格要求。定位请求下发不等于手机已采纳，更不等于健康功能已开通。
 
-本目录（含未来新增的所有文件）为 **GPL-3.0-only**，因为 macOS 引擎 vendor 了
-`aur3l14no/accessory-location`（GPL-3.0-only）。
+## 源码安装
 
-* `macos/LICENSE` 是 GPL-3.0 全文，**不得删除或修改**。
-* 本目录的 GPL **不覆盖**仓库其他部分；根目录的 MIT 也**不覆盖**本目录。
-* 不要把本目录的任何代码复制到 `assistant/`。详见 `docs/LICENSE-BOUNDARY.md`。
+需要 macOS、USB 数据线、Python 3.13（uv 可安装）、uv；首次开发者镜像准备需要完整 Xcode。
 
-## 要做什么
-
-在 `macos/` 下提供一个桥接进程，让助手核心通过 HTTP 复用现有 DVT 实现：
-
-```bash
-python -m location_studio_mac.bridge --host 127.0.0.1 --port 8900
+```sh
+git clone https://github.com/YEZH0/watch-hypertension-assistant.git
+cd watch-hypertension-assistant
+# 合并前验证版本：git switch feat/macos
+zsh macos/scripts/install.command
+macos/.venv/bin/python -m location_studio_mac.assistant --help
 ```
 
-它必须暴露五个接口（完整规格见 `docs/ADAPTER-CONTRACT.md`）：
+安装脚本只安装 Python 依赖与公共助手，不触碰设备设置，不下载 MFi 身份。
+公共助手和 GPL 桥接使用同一解释器但分进程运行；公共助手通过 HTTP 调用，未改动 assistant/。
 
-| 接口 | 说明 |
-|---|---|
-| `GET /api/health` | `{"ok": true, "version": "..."}` |
-| `GET /api/devices` | `{"connected": bool, "devices": [...]}` |
-| `GET /api/status` | `{"session": {...}}` |
-| `POST /api/simulate` | 请求体 `{latitude, longitude, hold_seconds}` |
-| `POST /api/stop` | 停止并恢复 |
+## 使用
 
-## 必须遵守的约束
-
-1. **不重写定位协议。** 复用 `macos/` 内既有的 `dvt_*` worker 命令与 `sandbox-exec`
-   沙箱配置，桥接层只做协议转换。
-2. **DVT 是默认路线。** iAP2 保留为实验性选项，默认不启用，不参与自动判定。
-   iAP2 历史上存在"有 ACK 却不采纳位置"的记录，不能承诺生效。
-3. **不是所有成功都叫成功。** worker 的 `dvt_set_sent` 只表示请求已发送。
-   会话进入 `active` 才可以认为模拟定位在下发中。仍然不能等同于手机上已验证。
-4. **不泄露设备信息。** 不要把设备标识、ECID、票据、原始工具日志放进 HTTP 响应
-   或日志。参考旧实现：错误事件只保留 `type`，丢弃 detail。
-5. **GPL 材料不外流。** 证书、私钥、配对记录不进入本目录，也不进入任何响应。
-
-## 会话状态语义
-
-`state` 只允许：`idle` / `connecting` / `active` / `stopping` / `error`
-
-| 状态 | 含义 |
-|---|---|
-| `connecting` | 正在建立 DVT 隧道 |
-| `active` | 已下发模拟坐标，保持中 |
-| `stopping` | 正在清除并关闭隧道 |
-| `idle` | 已停止 |
-| `error` | 失败，`error` 字段说明原因 |
-
-**禁止**在响应里出现任何 `hypertension_*`、`compatible`、`enabled` 之类的字段。
-
-## 自检
-
-从仓库根目录：
-
-```bash
-python -m assistant --engine-url http://127.0.0.1:8900 env
-python -m assistant --engine-url http://127.0.0.1:8900 devices
-python -m assistant --engine-url http://127.0.0.1:8900 check
-python -m assistant --engine-url http://127.0.0.1:8900 start --region hk
-python -m assistant --engine-url http://127.0.0.1:8900 stop
+```sh
+macos/.venv/bin/python -m location_studio_mac.assistant env
+macos/.venv/bin/python -m location_studio_mac.assistant devices
+macos/.venv/bin/python -m location_studio_mac.assistant check
+macos/.venv/bin/python -m location_studio_mac.assistant guide
 ```
 
-五条全部正常返回 = 接入完成。**助手核心不需要任何改动。**
+连接且只连接一部 iPhone。解锁手机，按提示信任电脑；在“设置 → 隐私与安全性 → 开发者模式”启用并按手机提示重启确认。
+设备识别不等于开发者模式就绪；DVT worker 启动时检查该状态，未满足会阻断。
+首次连接若 DVT 镜像未准备好，先打开 Xcode 完成设备准备。
+也可在明确同意 devicectl 向 Apple 请求设备开发者镜像票据后执行：
 
-## 测试要求
+```sh
+macos/.venv/bin/python -m location_studio_mac.app --worker dvt_prepare --allow-apple-ticket
+```
 
-在 `macos/` 内至少覆盖：
+此准备沿用旧流程，可能与 Apple 联网，不能静默代用户同意。普通 DVT 测试使用既有本地网络限制沙箱。
 
-* 桥接能启动并响应 `/api/health`；
-* 无设备时 `/api/simulate` 返回 `409` 而非崩溃；
-* `state` 只输出合法枚举；
-* `stop` 之后回到 `idle`；
-* 响应与日志中不含设备标识符。
+核对 Apple 当前官方说明：<https://support.apple.com/en-us/117296> 和 <https://www.apple.com/watchos/feature-availability/>。
+在 iPhone Watch App“通用 → 关于本机”确认机型和系统；在健康 App 确认年龄及使用资格，开启腕部检测。
+助手无法通过 USB 自动读取配对手表的健康功能资格；不确定的条件须人工确认，不应当成通过。
 
-`tests/conftest.py` 里的假引擎可以直接复用为桩实现。
+完成资格核对后，选择固定预设之一：
 
-## 改动范围
+```sh
+macos/.venv/bin/python -m location_studio_mac.assistant start --region hk
+# 其他选项：us、fr、jp；最长 180 秒，不开放地图或任意坐标。
+macos/.venv/bin/python -m location_studio_mac.assistant status
+macos/.venv/bin/python -m location_studio_mac.assistant stop
+```
 
-* ✅ `macos/**`
-* ✅ `.github/workflows/` 新增 macOS job
-* ❌ `assistant/**`（契约已冻结；确需修改请先与 Windows Agent 确认并提 issue）
-* ❌ `windows/**`
+在 iPhone 地图检查是否采纳测试位置；再在健康 App“头像 → 健康检查清单”查找高血压通知，按当前 App 指引核验。
+不可把没有显示功能解释为定位失败，也不可把定位成功报告为功能开通。功能不是即时血压测量。
+停止或自动到期后，worker 尝试 clear 并关闭会话；请在地图确认真实定位。若未恢复，拔线等待 GPS 更新，必要时重启后复查。
+异常退出、clear 失败、强杀、睡眠、断线情况下不能承诺恢复，须人工核验。
 
-全部改动通过 PR 合并，未经维护者确认不得合并到 `main`。
+## 实现、来源与验证
+
+旧分支 `feat/macos-iap2` 固定来源提交 `9f978d21370ad4d67ff9f4d59d0c0f1e254c9b55`。
+原样保留 src/location_studio_mac 的 DVT、Engine、worker 及实验性 iAP2，桥接只调用 DVT。
+旧 app.py 地图 GUI 仅为来源参考，不是新助手入口，不建议运行。
+完整 vendor 源码、LICENSE、THIRD_PARTY_NOTICES 保留；TEST_REPORT.md 与 RESEARCH.md 是旧项目历史证据，不能代表本项目实机通过。
+2026-11-17 新增 bridge.py、测试、安装及文档，未修改旧定位实现。
+不应将 HTTP 进程边界直接视为最终法律结论；发行者仍须履行 GPL 源码和声明义务。
+
+桥接手动启动：`macos/.venv/bin/python -m location_studio_mac.bridge --host 127.0.0.1 --port 8900`。
+仅监听 IPv4 回环；拒绝浏览器 Origin，设备句柄为临时别名，不返回真实 UDID；不记录原始 worker 日志。
+同机进程仍可调用桥接。退出桥接时会尝试停止 worker。实验性 iAP2 无默认入口，不承诺生效。
+
+```sh
+cd macos
+uv run --no-sync pytest -q
+```
+
+新项目测试和实机覆盖见 INTEGRATION_TEST_REPORT.md。
+
+## 恢复定位提示
+
+Mac 推荐入口为 `python -m location_studio_mac.assistant`：每次运行都会明确显示恢复提示（JSON 模式写入 stderr），再委托公共助手。直接运行公共 `python -m assistant` 的固定提示暂未包含本 Mac 补充说明。
+
+停止后若回跳缓慢，请打开 iPhone「设置 → 隐私与安全性 → 定位服务」，关闭定位服务，等待约 10 秒后重新开启，再回地图点击定位确认。该建议不保证立即恢复；没有人工确认不能报告恢复成功。
