@@ -93,8 +93,14 @@ def test_start_with_dead_engine_reports_blocked(capsys):
 
 
 def test_stop_with_dead_engine_exits_nonzero(capsys):
+    """引擎连不上返回 1（被阻断），不是 2（用法错误）。
+
+    2 会让脚本和 AI Agent 以为「参数写错了」去改命令，而真正要做的是把引擎启动起来。
+    2 只留给真正的用法错误，比如未知地区预设。
+    """
     code = main(["--engine-url", "http://127.0.0.1:1", "stop"])
-    assert code == 2
+    assert code == 1
+    assert "无法连接定位引擎" in capsys.readouterr().err
 
 
 def test_invalid_region_exits_two(capsys):

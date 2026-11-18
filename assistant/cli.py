@@ -701,12 +701,16 @@ def main(argv: list[str] | None = None) -> int:
         print(f"错误：{exc}", file=sys.stderr)
         if exc.hint:
             print(f"建议：{exc.hint}", file=sys.stderr)
-        return 2
+        # 引擎不可用是「现在没法继续」，不是「命令你用错了」。
+        # 返回 2 会让脚本和 AI Agent 去改参数，方向完全错；2 只留给真正的用法错误。
+        return 1
     except AdapterError as exc:
         print(f"错误：{exc}", file=sys.stderr)
-        return 2
+        return 1
     except KeyError as exc:
-        print(f"错误：{exc}", file=sys.stderr)
+        # 未知地区预设这类是用户输入错误：返回 2，和 argparse 的用法错误对齐。
+        # KeyError 的 str() 带引号，剥掉再打印。
+        print(f"错误：{str(exc).strip(chr(39) + chr(34))}", file=sys.stderr)
         return 2
 
     parser.print_help()

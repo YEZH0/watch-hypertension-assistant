@@ -107,12 +107,19 @@ def test_start_blocked_without_device(fake_engine):
 
 
 def test_start_rejects_unknown_region(fake_engine):
-    _, url = fake_engine
-    from assistant.adapters.base import AdapterUnavailable
+    """未知地区必须被拒绝，且归类为「输入错误」而不是「引擎不可用」。
 
-    with pytest.raises(AdapterUnavailable) as excinfo:
+    早先这里抛 AdapterUnavailable，于是 CLI 用退出码 1 并提示「确认引擎已启动」——
+    用户明明只是把 hk 打成了 tokyo，却被引去查引擎。2 才对：参数错了。
+    """
+    _, url = fake_engine
+
+    with pytest.raises(KeyError) as excinfo:
         _assistant(url).start_test("tokyo", 60)
-    assert "us, hk, fr, jp" in excinfo.value.hint
+
+    message = str(excinfo.value)
+    assert "us, hk, fr, jp" in message
+    assert "未知地区" in message
 
 
 @pytest.mark.parametrize(

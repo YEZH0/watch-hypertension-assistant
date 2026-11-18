@@ -205,10 +205,11 @@ class Assistant:
         try:
             return regions.get(region_id)
         except KeyError as exc:
-            raise AdapterUnavailable(
-                str(exc).strip("'\""),
-                hint=f"可选地区：{', '.join(p.id for p in regions.presets())}",
-            ) from exc
+            # 未知地区是**用户输入错误**，不是「引擎不可用」。包装成
+            # AdapterUnavailable 会让 CLI 用错误的退出码（1 而非 2）并给出
+            # 「确认引擎已启动」这类完全无关的建议。
+            available = ", ".join(p.id for p in regions.presets())
+            raise KeyError(f"未知地区预设 {region_id!r}；可选：{available}") from exc
 
     @staticmethod
     def _clamp_hold(hold_seconds: int) -> int:
