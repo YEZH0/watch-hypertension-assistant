@@ -13,6 +13,7 @@
 | [LICENSE-BOUNDARY.md](LICENSE-BOUNDARY.md) | MIT 与 GPL 的边界 | 提交任何代码前 |
 | [DEPENDENCIES.md](DEPENDENCIES.md) | 依赖清单与策略 | 装环境 / 升级依赖 |
 | [CI-SETUP.md](CI-SETUP.md) | CI 现状、维护方式与历史踩坑 | 想改工作流 / 排查权限 |
+| [WINDOWS-TEST-REPORT.md](WINDOWS-TEST-REPORT.md) | Windows 真机实测记录、暴露的缺陷、未覆盖路径 | 想知道「到底在真机上跑通过没有」 |
 
 ## 三分钟了解这个项目
 

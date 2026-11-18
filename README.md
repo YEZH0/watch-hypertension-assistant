@@ -20,6 +20,7 @@ Apple Watch **高血压通知**兼容性与设置测试助手。
 | 你（或你的 AI Agent）手上只有这个仓库 URL | **[AGENTS.md](AGENTS.md)** ← 从这里开始 |
 | 你自己动手，只想快点跑起来 | [docs/QUICKSTART.md](docs/QUICKSTART.md) |
 | 想一步步走完，包括手机上要做的事 | [docs/TUTORIAL.md](docs/TUTORIAL.md) |
+| 想知道真机上到底跑通没有、哪些路径还没验证 | [docs/WINDOWS-TEST-REPORT.md](docs/WINDOWS-TEST-REPORT.md) |
 
 **一句提示词就够：**
 
