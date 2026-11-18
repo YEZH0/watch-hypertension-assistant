@@ -126,7 +126,8 @@ python -m assistant stop                                 # 5. 停止 + 恢复指
 
 ## 安装
 
-本助手**运行时零第三方依赖**，只用 Python 标准库。定位能力来自外部引擎。
+公共助手（`assistant/`）**运行时零第三方依赖**，只用 Python 标准库。
+定位能力来自外部引擎，两个平台各走一条路：
 
 ```bash
 git clone https://github.com/YEZH0/watch-hypertension-assistant.git
@@ -134,12 +135,20 @@ cd watch-hypertension-assistant
 pip install -e ".[dev]"     # 仅装测试工具，版本固定
 ```
 
-然后需要已有的定位引擎（不会自动帮你装，也不会替你下载第三方程序）：
+* **Windows**：需要已有的 `ios-location-studio` 引擎（`fix/windows-stabilization` 分支）。
+  助手会自动发现运行中的实例（8899–8903），找不到再尝试拉起。
+  首次安装若遇到 `ModuleNotFoundError: No module named 'ios_location_studio'`，
+  见 [docs/FAQ.md](docs/FAQ.md) 的安装排查。
+* **macOS**：引擎在 `macos/` 子项目里，**不是**去装外部仓库。
+  按 [macos/README.md](macos/README.md) 执行 `zsh macos/scripts/install.command`，
+  它会建 `macos/.venv` 并装 PySide6 / pymobiledevice3。
+  **macOS 侧不是零依赖**，这与 Windows 侧不同，别混着理解。
 
-* **Windows**：`ios-location-studio` 的 `fix/windows-stabilization` 分支
-* **macOS**：`ios-location-studio` 的 `feat/macos-iap2` 分支
+`macos/` 是 GPL-3.0-only，与 MIT 的公共部分用进程间 HTTP 隔离，
+边界见 [docs/LICENSE-BOUNDARY.md](docs/LICENSE-BOUNDARY.md)。
 
-详细步骤见 [docs/TUTORIAL.md](docs/TUTORIAL.md) 和 [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md)。
+详细步骤见 [docs/TUTORIAL.md](docs/TUTORIAL.md)、[docs/DEPENDENCIES.md](docs/DEPENDENCIES.md)
+与 [agent/](agent/) 下对应平台的安装提示词。
 
 ---
 
@@ -202,10 +211,10 @@ assistant/            助手核心（跨平台，MIT）
   adapters/           定位引擎适配器 —— 唯一与旧项目交界的地方
   data/               地区预设与兼容性事实表（带来源与核验日期）
 windows/              Windows 适配器说明（复用 DVT 引擎）
-macos/                macOS 桥接（GPL-3.0-only，由 Mac Agent 维护）
+macos/                macOS 子项目：引擎、界面与测试（GPL-3.0-only，自带 pyproject）
 agent/                Windows / Mac 两套 AI Agent 提示词
-docs/                 快速开始、教程、FAQ、架构、依赖、许可边界、适配器契约
-tests/                自动化测试（143 项）
+docs/                 快速开始、教程、FAQ、架构、依赖、许可边界、适配器契约、真机实测
+tests/                自动化测试（148 项，跨 py3.11–3.13 × Windows/Ubuntu，见 CI）
 ```
 
 文档索引见 [docs/README.md](docs/README.md)。

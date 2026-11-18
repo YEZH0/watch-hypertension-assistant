@@ -6,12 +6,16 @@ GPL-3.0-only，无担保，许可证见 LICENSE；完整来源与依赖声明见
 
 ## 当前状态与依赖
 
-V1 原接入位于 `feat/macos` / PR #1，尚未合并，保持独立。
-本 V1.1 分支 `feat/guided-flow-macos` 依赖 PR #1，已同步 main @ 1cec2a7。
-已整合 Windows 引导分支 @ 0bc5750 的公共 wizard（仍未合并 main），使用同一阶段与 JSON 契约。
-本分支只转发已安装的公共 wizard，不自行实现状态机；缺失时明确退出且不发送坐标。
-AI Agent 应严格按 [完整操作提示词](../agent/macos-install-prompt.md)驱动同一个公共 wizard，逐项等待手机确认。Mac CI 与尚未覆盖的实机场景不应被标为完成。
-根 README/AGENTS/公共教程的链接入口由 Windows Agent 负责协调，本分支不覆盖公共文件。
+macOS 能力已并入最终整合分支 `feat/final-integration`（PR #1 的底座 + PR #3 的 V1.1
+改进都在其中），与 Windows 侧共用同一份公共 wizard、同一套阶段 id 与 JSON 契约。
+本目录只转发已安装的公共 wizard，不自行实现状态机；缺失时明确退出且不发送坐标。
+AI Agent 应严格按 [完整操作提示词](../agent/macos-install-prompt.md)驱动同一个公共 wizard，逐项等待手机确认。
+公共文件（README / AGENTS.md / docs / assistant）仍由 Windows 侧协调，本目录不覆盖。
+
+**macOS 实机验证尚未完成。** 在非 macOS 平台上跑 `macos/tests` 时，11 项会因
+`PySide6.QtCore.QProcess` 没有 `UnixProcessParameters`（Qt 的 macOS 专有 API）
+以及缺少 pymobiledevice3 而失败——这属于平台限制，不代表功能可用性，也**不能**
+当作已通过。真机结论以 macOS 上实际跑完 0–8 为准。
 
 ## 源码安装与检查
 
@@ -22,11 +26,14 @@ AI Agent 应严格按 [完整操作提示词](../agent/macos-install-prompt.md)�
 ```sh
 git clone https://github.com/YEZH0/watch-hypertension-assistant.git
 cd watch-hypertension-assistant
-# 未合并前的评审版本，先明确告知用户：
-git switch feat/guided-flow-macos
+# 最终整合尚未合并 main 时，先切到整合分支（合并后直接用 main，无需 switch）：
+git switch feat/final-integration
 zsh macos/scripts/install.command
 macos/.venv/bin/python -m location_studio_mac.doctor
 ```
+
+`install.command` 会把仓库根目录的公共助手一起装进 `macos/.venv`（向导要它），
+装不上会当场报错退出，不会让用户走到手机上才发现。
 
 doctor 仅检查系统、依赖、沙箱与 devicectl，不访问 USB、不请求 Apple 票据、不证明设备已授权。
 Mac 有 PySide6、pymobiledevice3 等依赖，不是“零第三方依赖”。公共助手与 GPL 桥接分进程，通过本机 HTTP 通信。

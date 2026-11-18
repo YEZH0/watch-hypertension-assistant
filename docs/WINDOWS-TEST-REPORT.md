@@ -28,6 +28,11 @@ PYTHONPATH=src python -m ios_location_studio --no-browser --port 8899
 > 已知安装问题：某些环境下 `pip install -e .` 生成的 `.pth` 钩子不生效，
 > `ios-location-studio.exe` 会报 `ModuleNotFoundError: No module named 'ios_location_studio'`。
 > 用上面的 `PYTHONPATH=src -m` 方式可以直接绕开。属于引擎仓库的安装体验问题。
+>
+> 助手侧已针对这种情况做了处理：探测入口时会先跑一次 `--version`，起不来的当场
+> 记下原因并给出上面的启动命令，不再白等 25 秒后报「未在等待时间内就绪」。
+> 见 [FAQ](FAQ.md) 的 `No module named 'ios_location_studio'` 条目与
+> `tests/test_windows_adapter.py` 的六个用例。
 
 ---
 

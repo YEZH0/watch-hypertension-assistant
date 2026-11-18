@@ -129,6 +129,27 @@ pip install "git+https://github.com/YEZH0/ios-location-studio.git@fix/windows-st
 python -m assistant --engine-url http://127.0.0.1:8899 env
 ```
 
+### 装完引擎却报 `No module named 'ios_location_studio'`
+
+这是 editable 安装（`pip install -e .`）在部分环境下生成的路径钩子没生效，
+**不等于引擎没装**。典型表现：`ios-location-studio.exe` 明明存在，一执行就崩。
+
+直接绕开入口脚本，用模块方式启动：
+
+```bash
+cd <引擎源码目录>
+PYTHONPATH=src python -m ios_location_studio --no-browser --port 8899
+```
+
+然后在另一个终端用 `--engine-url` 指向它：
+
+```bash
+python -m assistant --engine-url http://127.0.0.1:8899 wizard
+```
+
+助手现在会先跑一次 `--version` 验证入口真的能用，所以这种情况下它会直接告诉你
+「存在但导入失败……可以手动启动」，而不是让你干等 25 秒再报「未在等待时间内就绪」。
+
 ### 提示"不支持的平台：Linux"
 
 本助手只支持 Windows 与 macOS。定位引擎本身不支持 Linux（usbmux 与 DVT 依赖
