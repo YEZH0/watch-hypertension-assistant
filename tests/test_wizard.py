@@ -710,3 +710,124 @@ def test_cli_guide_mentions_card_absent_has_multiple_causes(capsys):
     assert "support.apple.com" in out
     # 旧的单一因果断言必须消失
     assert "这就是结论" not in out
+
+
+# ---------------------------------------------------------------- 真机实测暴露的问题
+#
+# 下面三条都是 2026-11-18 用真机（iPhone 15 / iOS 27.0.1）+ 真引擎跑 0–8 全流程时
+# 实际撞到的：测试全绿也照样发生，因为测试只喂「顺利路径」，没人检查阶段性输出。
+
+
+def test_final_answer_renders_report_immediately(fake_engine, tmp_path, capsys):
+    """答完第 7 步必须当场看到分项报告。
+
+    实测：`--answer restored` 只打印「第 7 步已完成」就退出，报告要再跑一次
+    --status 才出现。分五次命令行驱动时，用户看到的是一个没结尾的流程。
+    """
+    wiz = _wizard(fake_engine, tmp_path)
+    _to_restore(wiz)
+    resolution = wiz.submit("restored")
+
+    # 流程终点也必须给出「下一步」，否则 CLI 的渲染分支不会触发。
+    assert resolution["next"] is not None, "终点阶段缺少 next，报告不会被渲染"
+    assert resolution["next"]["stage"] == "report"
+    assert resolution["next"]["report"]["lines"], "next 里没有报告内容"
+
+    # 端到端确认文本真的打出来了。
+    _, url = fake_engine
+    state_path = str(tmp_path / "cli-state.json")
+    for answer in ("accept", "ready", "connected", "confirmed", "hk", "moved", "setup_done"):
+        main(["--engine-url", url, "wizard", "--state-file", state_path, "--answer", answer])
+    capsys.readouterr()
+    code = main(["--engine-url", url, "wizard", "--state-file", state_path, "--answer", "restored"])
+    out = capsys.readouterr().out
+    assert code == wizard.EXIT_OK
+    assert "分项报告" in out
+    assert "健康 App 功能" in out
+
+
+def test_health_stage_reports_that_session_was_stopped(fake_engine, tmp_path):
+    """第 6 步答完就要说清「模拟已停」，别让用户猜。
+
+    实测：停是停了（引擎回到 idle），但输出里一个字都没提。用户随后被要求去看
+    地图，分不清此时蓝点不动是因为「已经恢复了」还是因为「根本没停」。
+    """
+    wiz = _wizard(fake_engine, tmp_path)
+    _to_region(wiz)
+    wiz.submit("hk")
+    wiz.submit("moved")
+    resolution = wiz.submit("setup_done")
+
+    joined = "\n".join(resolution["notes"])
+    assert "模拟会话已停止" in joined
+    # 停掉会话 ≠ 手机位置已恢复，这句边界必须留着。
+    assert "仍需你去地图确认" in joined
+    assert fake_engine[0].session_state == "idle"
+
+
+def test_stage_notes_use_live_remaining_not_stale_snapshot(fake_engine, tmp_path):
+    """会话剩余时间必须实时读，不能念进度文件里的旧快照。
+
+    实测：进度文件把下发那一刻的 180 秒永久存了下来，用户在健康 App 里待了
+    五分钟，界面还在说「剩余约 180 秒」。
+    """
+    state, _ = fake_engine
+    wiz = _wizard(fake_engine, tmp_path)
+    _to_region(wiz)
+    wiz.submit("hk")
+
+    # 快照记的是下发那一刻的值，引擎此刻只剩 45 秒 —— 必须以后者为准。
+    snapshot = wiz.state["session_remaining"]
+    assert snapshot is not None and snapshot != 45.0
+    state.session_remaining = 45.0
+    notes = "\n".join(wiz.describe("simulate")["notes"])
+    assert "剩余约 45 秒" in notes
+    assert f"剩余约 {int(snapshot)} 秒" not in notes
+
+    # 会话已经到期时，不能说「还剩 0 秒」，要说「已经结束」。
+    state.session_state = "idle"
+    notes = "\n".join(wiz.describe("health")["notes"])
+    assert "已经结束" in notes
+    assert "剩余约" not in notes
+
+
+def test_describe_in_session_stages_is_read_only(fake_engine, tmp_path):
+    """实时读剩余时间只能读，不能顺手改会话状态。"""
+    state, _ = fake_engine
+    wiz = _wizard(fake_engine, tmp_path)
+    _to_region(wiz)
+    wiz.submit("hk")
+    state.calls.clear()
+
+    wiz.describe("simulate")
+    wiz.describe("health")
+
+    assert state.calls, "应当至少读过一次 /api/status"
+    assert all(method == "GET" for method, _ in state.calls), state.calls
+    assert all(path == "/api/status" for _, path in state.calls), state.calls
+    assert state.session_state == "active"
+
+
+def test_report_states_session_is_over_not_still_active(fake_engine, tmp_path):
+    """报告在流程末尾生成，那时会话已经停了。
+
+    实测输出里只有「引擎已接受（active）」这一句，读到的人会以为会话还在跑——
+    而他下一步要做的是确认位置有没有恢复，这个误解直接指向错误判断。
+    """
+    wiz = _wizard(fake_engine, tmp_path)
+    _to_restore(wiz)
+    wiz.submit("restored")
+
+    label = wiz.report()["simulation"]["label"]
+    assert "会话已停止" in label
+    # 不能说成「现在仍 active」；过去时必须体现出来。
+    assert "已接受过" in label
+
+    # 停止失败时必须如实说，不能也写成「已停止」。
+    wiz2 = _wizard(fake_engine, tmp_path / "second")
+    wiz2.state_path.parent.mkdir(parents=True, exist_ok=True)
+    wiz2.state["region"] = "hk"
+    wiz2.state["stop_ok"] = False
+    label = wiz2.report()["simulation"]["label"]
+    assert "停止失败" in label
+    assert "手动 stop" in label

@@ -358,13 +358,36 @@ class Wizard:
 
     # ------------------------------------------------------------ 当前阶段说明
 
-    def _instructions(self, stage: StageSpec) -> tuple[list[str], list[str], list[str]]:
+    def _live_remaining(self, stage: StageSpec) -> float | None:
+        """实时的会话剩余秒数；只有 simulate / health 阶段才去问引擎。
+
+        返回值约定：
+        - ``None``：读不到（引擎掉线、本阶段没有会话），调用方不得编造秒数；
+        - ``> 0``：仍在保持的剩余时间；
+        - ``<= 0``：会话已经不在 active，告诉用户"已结束"而不是"还剩 0 秒"。
+        """
+        if stage.id not in ("simulate", "health"):
+            return None
+        try:
+            snapshot = self.assistant.session()
+        except AdapterError:
+            return None
+        if snapshot.state != "active":
+            return 0.0
+        return snapshot.remaining if snapshot.remaining is not None else None
+
+    def _instructions(
+        self, stage: StageSpec, remaining: float | None = None
+    ) -> tuple[list[str], list[str], list[str]]:
         """返回 (要做的事, 注意事项, 助手这边会做什么)。
 
         说明文字必须真实可执行。写「请检查网络」这种正确但无用的句子，
         等于什么都没说。
+
+        ``remaining`` 必须由调用方实时读取后传入（只有 simulate / health 阶段有意义）。
+        不要退回读进度文件里的 ``session_remaining``：那是下发那一刻的快照，用户
+        在健康 App 里花上几分钟后它早已过期，照着念会给出错的秒数。
         """
-        remaining = self.state.get("session_remaining")
 
         if stage.id == "safety":
             todo = [
@@ -430,10 +453,16 @@ class Wizard:
             ]
             notes = [
                 guide.MAP_NOT_ADOPTED_NOTE,
-                "默认保持 180 秒，到时间引擎会自动停止；这期间足够你切到手机上看一眼。",
+                "会话按设定时长自动结束（默认 180 秒），到点不会弹任何提示。",
             ]
             if remaining is not None:
-                notes.append(f"当前会话剩余约 {int(remaining)} 秒。")
+                if remaining > 0:
+                    notes.append(f"当前会话剩余约 {int(remaining)} 秒。")
+                else:
+                    notes.append(
+                        "会话已经结束（到达时长自动停止是正常的）。蓝点可能仍停在测试点，"
+                        "这是 iOS 定位缓存的表现，不影响你如实回答看到的结果。"
+                    )
             helper = ["只记录你看到的结果，不做任何推断。"]
         elif stage.id == "health":
             todo = [
@@ -448,10 +477,16 @@ class Wizard:
                 "菜单位置差异），回答后助手会把它们全部列出来。",
             ]
             if remaining is not None:
-                notes.append(
-                    f"本次模拟会话剩余约 {int(remaining)} 秒；到时间自动停止是正常的，"
-                    "不会影响你在健康 App 里的操作。"
-                )
+                if remaining > 0:
+                    notes.append(
+                        f"本次模拟会话剩余约 {int(remaining)} 秒；到时间自动停止是正常的，"
+                        "不会影响你在健康 App 里的操作。"
+                    )
+                else:
+                    notes.append(
+                        "本次模拟会话已经结束（到达时长自动停止是正常的），"
+                        "不影响你在健康 App 里继续核验。"
+                    )
             helper = ["在你回答后立即停止模拟会话并进入恢复阶段。"]
         elif stage.id == "restore":
             todo = [
@@ -472,9 +507,9 @@ class Wizard:
         return todo, notes, helper
 
     def describe(self, stage_id: str | None = None) -> dict[str, Any]:
-        """当前阶段（或指定阶段）的完整说明。无副作用，可反复调用。"""
+        """当前阶段（或指定阶段）的完整说明。只读，可反复调用。"""
         stage = STAGE_INDEX[stage_id or self.state["stage"]]
-        todo, notes, helper = self._instructions(stage)
+        todo, notes, helper = self._instructions(stage, remaining=self._live_remaining(stage))
         answers = [
             {
                 "value": value,
@@ -781,7 +816,15 @@ class Wizard:
 
         cleanup = self.assistant.safe_stop()
         cleanup_ok = bool(cleanup["ok"])
-        if not cleanup_ok:
+        if cleanup_ok and not expired:
+            # 用户答完这一阶段就被要求去看地图。不告诉他"已经停了"，
+            # 他会以为模拟还在跑，或者反过来以为停了就会自动恢复。
+            # expired 为真时上面已经说过会话结束了，不必重复。
+            notes.append(
+                "模拟会话已停止（引擎已无活跃会话）。这只保证引擎不再下发坐标；"
+                "手机上蓝点是否回去，仍需你去地图确认。"
+            )
+        else:
             warnings.append(
                 f"停止会话失败（{cleanup.get('error')}）。引擎可能仍在保持模拟，"
                 "请手动再运行一次 python -m assistant stop。"
@@ -839,7 +882,16 @@ class Wizard:
         def _cn_simulation() -> str:
             if state["region"] is None:
                 return "未下发（流程未到地区测试阶段）"
-            return f"引擎已接受（active），测试点 {state['region']}"
+            base = f"引擎已接受过模拟请求（active），测试点 {state['region']}"
+            # 报告大多是在流程末尾生成的，那时会话早该结束了。
+            # 只写「引擎已接受（active）」会被读成「现在还 active」，必须带上现状。
+            if state["stop_ok"] is True:
+                return base + "；会话已停止"
+            if state["session_expired"]:
+                return base + "；会话已到期结束"
+            if state["stop_ok"] is False:
+                return base + "；停止失败，可能仍在保持模拟，请手动 stop"
+            return base + "；会话是否已停止未确认"
 
         def _cn_map() -> str:
             mapping = {
@@ -966,6 +1018,10 @@ class Wizard:
             payload["details"] = extra
         if self.state["stage"] == "report":
             payload["report"] = self.report()
+            # 流程终点同样要给出「下一步」，否则 --answer 的最后一次调用只打印
+            # 「第 7 步已完成」就退出，用户得再跑一次 --status 才看得到报告——
+            # 真机实测时就是这样掉进空白的。describe() 在这里返回的就是报告本身。
+            payload["next"] = self.describe()
             payload["exit_code"] = EXIT_OK
         else:
             payload["next"] = self.describe()
