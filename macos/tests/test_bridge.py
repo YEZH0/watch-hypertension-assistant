@@ -93,3 +93,32 @@ def test_http_health_and_origin(controller):
     worker.join(1)
     server.shutdown(); server.server_close()
     assert results == [{'ok':True, 'version':'0.1.0'},403]
+
+
+def test_early_worker_exit_is_not_success(controller):
+    req = call(controller, '/api/simulate', {'latitude':22.2819,'longitude':114.1588})
+    controller.engine.running = False
+    controller.consume({'event':'process_exit','code':0})
+    controller.ended()
+    assert req['result'][0] == 503
+    assert controller.state == 'error'
+
+
+def test_http_timeout_requests_cleanup(controller, monkeypatch):
+    captured = []
+    class Requests:
+        def emit(self, request): captured.append(request)
+    class FrozenController:
+        request = Requests()
+    monkeypatch.setattr(bridge, 'REQUEST_WAIT_SECONDS', .01)
+    server = ThreadingHTTPServer(('127.0.0.1',0), bridge.handler_for(FrozenController()))
+    thread = threading.Thread(target=server.serve_forever,daemon=True); thread.start()
+    try:
+        url = f'http://127.0.0.1:{server.server_port}/api/simulate'
+        req = urllib.request.Request(url, data=b'{}', headers={'Content-Type':'application/json'})
+        with pytest.raises(urllib.error.HTTPError) as error:
+            urllib.request.urlopen(req,timeout=2)
+        assert error.value.code == 504
+        assert [c['path'] for c in captured] == ['/api/simulate','/api/stop']
+    finally:
+        server.shutdown();server.server_close()

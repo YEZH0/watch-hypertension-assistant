@@ -13,6 +13,8 @@ fi
 uv python install 3.13
 uv sync --locked
 uv pip install --python .venv/bin/python --no-deps -e ..
-echo '依赖已安装。启动：.venv/bin/python -m location_studio_mac.assistant --help'
+.venv/bin/python -m location_studio_mac.doctor
+echo '依赖检查完成。接下来按 agent/macos-install-prompt.md 继续手机操作，不要停在安装。'
+echo '共享流程可用后运行：.venv/bin/python -m location_studio_mac.assistant wizard'
 xcrun --find devicectl >/dev/null 2>&1 || echo '首次 DVT 准备需要完整 Xcode 的 devicectl；安装并完成 Xcode 初始化。'
 [[ -x /usr/bin/sandbox-exec ]] || { echo '缺少 sandbox-exec，不能启动定位 worker'; exit 1; }
