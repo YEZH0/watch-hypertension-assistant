@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+.pytest_cache/
+build/
+dist/
+*.spec
+*.p7b
+*.pk8
+*.pem
+*.key
+*.log

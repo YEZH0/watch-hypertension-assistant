@@ -44,7 +44,7 @@ Issues = "https://github.com/YEZH0/watch-hypertension-assistant/issues"
 packages = ["assistant"]
 
 [tool.hatch.build.targets.sdist]
-include = ["assistant", "tests", "docs", "README.md", "LICENSE", "NOTICE.md"]
+include = ["assistant", "tests", "docs", "agent", "AGENTS.md", "README.md", "LICENSE", "NOTICE.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -55,6 +55,10 @@ pythonpath = ["."]
 target-version = "py311"
 line-length = 100
 src = ["assistant", "tests"]
+# macos/ 是独立子项目：自带 pyproject.toml，并 vendor 了 GPL-3.0-only 的
+# accessory-location。主项目的 lint 规则不适用于它，也不该因为它的风格让
+# 公共 CI 变红——那会掩盖真正属于本项目的回归。Mac 代码的规范由 Mac Agent 负责。
+exclude = ["macos"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]

@@ -26,6 +26,8 @@ class FakeEngineState:
             }
         ]
         self.session_state = "idle"
+        # 保持中的会话还剩下多少秒；测试改这个值来模拟「会话已到期」。
+        self.session_remaining: float = 120.0
         self.last_payload: dict[str, Any] | None = None
         self.fail_simulate_with: int | None = None
         self.calls: list[tuple[str, str]] = []
@@ -52,7 +54,7 @@ def _make_handler(state: FakeEngineState):
                 "state": state.session_state,
                 "latitude": 22.2819 if active else None,
                 "longitude": 114.1588 if active else None,
-                "remaining": 120.0 if active else None,
+                "remaining": state.session_remaining if active else None,
                 "message": "模拟定位已生效" if active else "",
                 "error": None,
             }

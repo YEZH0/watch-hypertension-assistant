@@ -113,9 +113,11 @@ class Assistant:
                     item.to_dict() for item in report.items if item.passed is False and item.blocking
                 ],
                 "location_test_does_not_imply": guide.CORE_WARNING,
+                "engine_active_note": guide.ENGINE_ACTIVE_NOTE,
+                "map_verification_required": False,
                 "feature_status": FEATURE_STATUS_UNVERIFIED,
                 "region_warning": regions.critical_warning(),
-                "verification_guide": guide.render(location_test_passed=False),
+                "verification_guide": guide.render(engine_active=False),
             }
 
         session = self.engine.start_location(preset.latitude, preset.longitude, hold)
@@ -130,9 +132,13 @@ class Assistant:
             "reason": "" if started else (session.error or session.message or "引擎未进入 active 状态"),
             # 无论成功与否都附带这句，避免成功被误读。
             "location_test_does_not_imply": guide.CORE_WARNING,
+            # active 只是引擎的自述。手机有没有采纳坐标，必须由用户看地图回答。
+            "engine_active_note": guide.ENGINE_ACTIVE_NOTE,
+            "map_verification_required": True,
+            "map_verification_answers": [dict(item) for item in guide.MAP_ANSWERS],
             "feature_status": FEATURE_STATUS_UNVERIFIED,
             "region_warning": regions.critical_warning(),
-            "verification_guide": guide.render(location_test_passed=started),
+            "verification_guide": guide.render(engine_active=started),
         }
 
     def stop_test(self) -> dict[str, Any]:
@@ -141,13 +147,38 @@ class Assistant:
             "stopped": session.state in ("idle",),
             "session": session.to_dict(),
             "restore_prompt": guide.RESTORE_PROMPT,
+            # 新结构：带触发条件，便于区分「总是要做」与「按情况排查」。
+            "restore_steps": [step.to_dict() for step in guide.RESTORE_STEPS],
+            # 兼容字段：名称沿用旧版，内容已条件化（见 guide.RestoreStep.to_line）。
             "restore_force_steps": list(guide.RESTORE_FORCE_STEPS),
+            "restore_note": guide.RESTORE_CONDITIONAL_NOTE,
             "restore_checklist": list(guide.RESTORE_CHECKLIST),
+            # 助手无法验证手机是否真的回到真实位置，这里如实标为未确认。
+            "user_confirmed_restored": None,
             "feature_status": FEATURE_STATUS_UNVERIFIED,
         }
 
     def session(self) -> SessionSnapshot:
         return self.engine.session()
+
+    def safe_stop(self) -> dict[str, Any]:
+        """尽力停止会话，**绝不抛异常**。
+
+        用于 Ctrl+C、异常退出、用户取消这类「必须收拾干净但不能因为收拾失败
+        再崩一次」的场景。返回值里的 ``ok`` 为 False 时，调用方要把
+        「请手动确认恢复」这件事告诉用户，而不是假装已经停好了。
+        """
+        try:
+            result = self.stop_test()
+            return {"ok": True, "result": result, "error": None}
+        except Exception as exc:  # noqa: BLE001 - 清理路径必须吞掉所有异常
+            return {
+                "ok": False,
+                "result": None,
+                "error": str(exc),
+                "restore_prompt": guide.RESTORE_PROMPT,
+                "restore_steps": [step.to_dict() for step in guide.RESTORE_STEPS],
+            }
 
     # ------------------------------------------------------------ 报告
 
@@ -162,6 +193,8 @@ class Assistant:
             "compatibility": compat_report.to_dict(),
             "regions": [preset.to_dict() for preset in regions.presets()],
             "region_warning": regions.critical_warning(),
+            "state_separation": [dict(item) for item in guide.STATE_SEPARATION],
+            "official_links": [dict(item) for item in guide.OFFICIAL_LINKS],
             "feature_status": FEATURE_STATUS_UNVERIFIED,
             "core_warning": guide.CORE_WARNING,
         }
@@ -172,10 +205,11 @@ class Assistant:
         try:
             return regions.get(region_id)
         except KeyError as exc:
-            raise AdapterUnavailable(
-                str(exc).strip("'\""),
-                hint=f"可选地区：{', '.join(p.id for p in regions.presets())}",
-            ) from exc
+            # 未知地区是**用户输入错误**，不是「引擎不可用」。包装成
+            # AdapterUnavailable 会让 CLI 用错误的退出码（1 而非 2）并给出
+            # 「确认引擎已启动」这类完全无关的建议。
+            available = ", ".join(p.id for p in regions.presets())
+            raise KeyError(f"未知地区预设 {region_id!r}；可选：{available}") from exc
 
     @staticmethod
     def _clamp_hold(hold_seconds: int) -> int:

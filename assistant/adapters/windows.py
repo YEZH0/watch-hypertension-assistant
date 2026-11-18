@@ -35,6 +35,8 @@ class WindowsLocationEngine(HttpLocationEngine):
 
     def __init__(self, base_url: str | None = None) -> None:
         super().__init__(base_url or f"http://127.0.0.1:{DEFAULT_PORTS[0]}", platform="windows")
+        # 探测失败的原因，用来把「未找到」换成「找到了但为什么起不来」。
+        self._entrypoint_issues: list[str] = []
 
     # ------------------------------------------------------------ 引擎发现
 
@@ -50,20 +52,75 @@ class WindowsLocationEngine(HttpLocationEngine):
         return ordered
 
     def _existing_entrypoint(self) -> list[str] | None:
-        """查找已安装的引擎命令行入口。"""
+        """查找**能真正跑起来**的引擎命令行入口。
+
+        只查 ``shutil.which`` 是不够的。editable 安装（``pip install -e``）在某些
+        环境下生成的路径钩子不生效：入口脚本存在，但一执行就
+        ``ModuleNotFoundError: No module named 'ios_location_studio'``。
+        这种情况下继续 Popen 会白等到超时，最后报「已启动但在等待时间内未就绪」，
+        用户会去查 USB、查端口、查防火墙——全错方向。
+
+        所以这里对每个候选入口真跑一次 ``--version``，起不来的当场记下原因。
+        """
+        self._entrypoint_issues = []
+
+        seen_paths: set[str] = set()
         for candidate in (ENGINE_NAME, f"{ENGINE_NAME}.exe"):
             found = shutil.which(candidate)
-            if found:
+            # Windows 上 which("x") 与 which("x.exe") 往往指向同一个文件，
+            # 去重避免同一次失败被验证两遍、报告两遍。
+            if not found or found in seen_paths:
+                continue
+            seen_paths.add(found)
+            issue = self._verify_entrypoint([found])
+            if issue is None:
                 return [found]
-        # 允许以已安装模块的形式存在（pip install 过旧项目）。
-        probe = subprocess.run(
-            [sys.executable, "-c", "import ios_location_studio"],
-            capture_output=True,
-            check=False,
-        )
-        if probe.returncode == 0:
-            return [sys.executable, "-m", "ios_location_studio"]
+            self._entrypoint_issues.append(issue)
+
+        # 候选二：以已安装模块的形式存在（pip install 过旧项目）。
+        module_command = [sys.executable, "-m", "ios_location_studio"]
+        issue = self._verify_entrypoint(module_command)
+        if issue is None:
+            return module_command
+        self._entrypoint_issues.append(issue)
         return None
+
+    @staticmethod
+    def _verify_entrypoint(command: list[str]) -> str | None:
+        """跑一次 ``--version`` 验证入口可用。可用返回 None，否则返回原因。"""
+        try:
+            probe = subprocess.run(  # noqa: S603 - 参数固定，无 shell
+                [*command, "--version"],
+                capture_output=True,
+                text=True,
+                timeout=15,
+                check=False,
+            )
+        except OSError as exc:
+            return f"{' '.join(command)} 无法执行：{exc}"
+        except subprocess.TimeoutExpired:
+            return f"{' '.join(command)} 在 15 秒内没有响应。"
+
+        if probe.returncode == 0:
+            return None
+
+        detail = f"{probe.stderr or ''}{probe.stdout or ''}".strip().splitlines()
+        reason = detail[-1] if detail else f"退出码 {probe.returncode}"
+
+        # 老版本引擎可能没有 --version。不能因此判定「不可用」，
+        # 退回「存在即可用」，由后面的等待就绪流程去暴露真正问题。
+        if probe.returncode == 2 and ("unrecognized arguments" in reason or "--version" in reason):
+            return None
+
+        if "No module named" in reason:
+            return (
+                f"{' '.join(command)} 存在但导入失败：{reason}。"
+                "这属于 editable 安装的路径钩子未生效，不等于引擎没装。"
+                "可以手动启动：PYTHONPATH=src python -m ios_location_studio "
+                "--no-browser --port 8899，然后加 "
+                "--engine-url http://127.0.0.1:8899 重试。"
+            )
+        return f"{' '.join(command)} 无法启动：{reason}"
 
     # ------------------------------------------------------------ 生命周期
 
@@ -107,6 +164,9 @@ class WindowsLocationEngine(HttpLocationEngine):
         """以子进程方式启动引擎。返回 None 表示启动成功，否则返回原因。"""
         entrypoint = self._existing_entrypoint()
         if entrypoint is None:
+            # 有原因就说原因：笼统的「未找到」会让用户重装一个其实已经装好的东西。
+            if self._entrypoint_issues:
+                return "找不到能启动的 " + ENGINE_NAME + " 入口。" + "；".join(self._entrypoint_issues)
             return (
                 f"未找到 {ENGINE_NAME}。请先安装已完成的 Windows 版本："
                 "pip install git+https://github.com/YEZH0/ios-location-studio.git@fix/windows-stabilization"

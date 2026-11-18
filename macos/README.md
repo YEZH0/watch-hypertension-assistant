@@ -1,92 +1,108 @@
-# macOS 适配器（待 Mac Agent 实现）
+# Watch Hypertension Assistant — macOS V1.1 准备分支
 
-> **状态：契约已冻结，实现待完成。**
-> 本目录由 Mac Agent 从 `main` 创建 `feat/macos` 分支后负责，Windows Agent 不修改本目录内容。
+复用原 DVT/USB/停止清理实现，不重写定位协议。只发布源码，不制作 APP/DMG。
+GPL-3.0-only，无担保，许可证见 LICENSE；完整来源与依赖声明见 THIRD_PARTY_NOTICES.md。
+位置模拟不能保证启用地区受限的高血压通知，不得绕过设备或医学使用条件。
 
-## 许可证：GPL-3.0-only
+## 当前状态与依赖
 
-本目录（含未来新增的所有文件）为 **GPL-3.0-only**，因为 macOS 引擎 vendor 了
-`aur3l14no/accessory-location`（GPL-3.0-only）。
+macOS 能力已并入最终整合分支 `feat/final-integration`（PR #1 的底座 + PR #3 的 V1.1
+改进都在其中），与 Windows 侧共用同一份公共 wizard、同一套阶段 id 与 JSON 契约。
+本目录只转发已安装的公共 wizard，不自行实现状态机；缺失时明确退出且不发送坐标。
+AI Agent 应严格按 [完整操作提示词](../agent/macos-install-prompt.md)驱动同一个公共 wizard，逐项等待手机确认。
+公共文件（README / AGENTS.md / docs / assistant）仍由 Windows 侧协调，本目录不覆盖。
 
-* `macos/LICENSE` 是 GPL-3.0 全文，**不得删除或修改**。
-* 本目录的 GPL **不覆盖**仓库其他部分；根目录的 MIT 也**不覆盖**本目录。
-* 不要把本目录的任何代码复制到 `assistant/`。详见 `docs/LICENSE-BOUNDARY.md`。
+**macOS 实机验证尚未完成。** 在非 macOS 平台上跑 `macos/tests` 时，11 项会因
+`PySide6.QtCore.QProcess` 没有 `UnixProcessParameters`（Qt 的 macOS 专有 API）
+以及缺少 pymobiledevice3 而失败——这属于平台限制，不代表功能可用性，也**不能**
+当作已通过。真机结论以 macOS 上实际跑完 0–8 为准。
 
-## 要做什么
+## 源码安装与检查
 
-在 `macos/` 下提供一个桥接进程，让助手核心通过 HTTP 复用现有 DVT 实现：
+先说明将从官方来源安装 Python/依赖、在 macos/.venv 建隔离环境，并取得用户安装授权。
+需要 macOS、Git、uv、Python（uv 可安装 3.13）、USB 数据线；首次开发者镜像准备可能需要完整 Xcode。
+不要用未知远程脚本，不关闭系统安全设置。
 
-```bash
-python -m location_studio_mac.bridge --host 127.0.0.1 --port 8900
+```sh
+git clone https://github.com/YEZH0/watch-hypertension-assistant.git
+cd watch-hypertension-assistant
+# 最终整合尚未合并 main 时，先切到整合分支（合并后直接用 main，无需 switch）：
+git switch feat/final-integration
+zsh macos/scripts/install.command
+macos/.venv/bin/python -m location_studio_mac.doctor
 ```
 
-它必须暴露五个接口（完整规格见 `docs/ADAPTER-CONTRACT.md`）：
+`install.command` 会把仓库根目录的公共助手一起装进 `macos/.venv`（向导要它），
+装不上会当场报错退出，不会让用户走到手机上才发现。
 
-| 接口 | 说明 |
+doctor 仅检查系统、依赖、沙箱与 devicectl，不访问 USB、不请求 Apple 票据、不证明设备已授权。
+Mac 有 PySide6、pymobiledevice3 等依赖，不是“零第三方依赖”。公共助手与 GPL 桥接分进程，通过本机 HTTP 通信。
+完整 Xcode 可从 Apple 官方渠道安装，初始化/组件下载需用户处理；devicectl 不可用时显示提示，不静默更改开发工具设置。
+
+## 完整手机旅程（必须等待人工确认）
+
+以下 0–8 对应 Issue #2 旅程编号，不是另立的机器阶段 ID。
+命令统一使用 `macos/.venv/bin/python -m location_studio_mac.assistant`，下文简称 MAC。
+入口为 `MAC wizard`；Agent 代跑使用 `MAC wizard --plan --json` 查看阶段，再以 `--answer` 提交用户真实确认。完整命令见 SHARED_FLOW.md。旧安装缺少 wizard 时明确提示，不退化为自动 start。
+
+| 阶段 | 操作与继续条件 |
 |---|---|
-| `GET /api/health` | `{"ok": true, "version": "..."}` |
-| `GET /api/devices` | `{"connected": bool, "devices": [...]}` |
-| `GET /api/status` | `{"session": {...}}` |
-| `POST /api/simulate` | 请求体 `{latitude, longitude, hold_seconds}` |
-| `POST /api/stop` | 停止并恢复 |
+| 0 告知与资格 | 暂时模拟位置会影响其他 App，仅用于本人/已授权设备。用户按 Apple 官方要求自查机型、系统、腕部检测与医学使用资格；不符合者只读核验/退出，不提供绕过。 |
+| 1 安装 | 完成上述源码安装和 doctor，继续后续手机步骤，不能停在 check。 |
+| 2 USB | 只连一部 iPhone、解锁、信任电脑，人工检查开发者模式；`MAC env`、`MAC devices`。无设备/多设备不发送坐标。 |
+| 3 真实基线 | 设置→隐私与安全性→定位服务开启，允许苹果地图定位/精确位置；地图点击当前位置。**本次用户确认蓝点在真实所在地后才能继续**，不记录地址。 |
+| 4 地区授权 | `MAC regions` 展示 us/hk/fr/jp 和坐标，用户明确选择并同意后才 `MAC start --region 所选代码 --hold 180`。不得代选。 |
+| 5 地图核验 | `MAC status` 看剩余时间；让用户回苹果地图点击当前位置，选择已移动/未移动/不确定。active 只表示下发请求，不能当作手机采纳证据。 |
+| 6 健康核验 | 先显示剩余时间；按 Apple 官方健康 App 流程核验并由用户确认设置结果。入口可见不等于设置完成，模拟结果不决定功能资格。 |
+| 7 停止恢复 | 完成/取消/超时/异常均 `MAC stop`、`MAC status`；用户在地图确认已恢复/未恢复/不确定。idle 不证明真实位置恢复。 |
+| 8 分项报告 | 安装、引擎、DVT 请求、地图、健康 App 设置、真实定位恢复各自报告；未确认写未知，不输出一键成功。 |
 
-## 必须遵守的约束
+预设与公共 regions.json 一致：美国纽约 `(40.758,-73.9855)`、中国香港 `(22.2819,114.1588)`、法国巴黎 `(48.8584,2.2945)`、日本东京 `(35.6595,139.7005)`。
+没有自由坐标/地图选点入口。引擎测试最长 180 秒，等待用户操作可能超时；到期安全结束，不自动续时。再测须重新确认基线、地区与授权。
 
-1. **不重写定位协议。** 复用 `macos/` 内既有的 `dvt_*` worker 命令与 `sandbox-exec`
-   沙箱配置，桥接层只做协议转换。
-2. **DVT 是默认路线。** iAP2 保留为实验性选项，默认不启用，不参与自动判定。
-   iAP2 历史上存在"有 ACK 却不采纳位置"的记录，不能承诺生效。
-3. **不是所有成功都叫成功。** worker 的 `dvt_set_sent` 只表示请求已发送。
-   会话进入 `active` 才可以认为模拟定位在下发中。仍然不能等同于手机上已验证。
-4. **不泄露设备信息。** 不要把设备标识、ECID、票据、原始工具日志放进 HTTP 响应
-   或日志。参考旧实现：错误事件只保留 `type`，丢弃 detail。
-5. **GPL 材料不外流。** 证书、私钥、配对记录不进入本目录，也不进入任何响应。
+### USB、开发者模式与镜像
 
-## 会话状态语义
+开发者模式在 iPhone 设置→隐私与安全性，由用户按系统提示重启并确认。能识别 USB 不代表开发者模式已就绪。
+DVT worker 会在启动时检查；缺失则阻断，桥接给出中文提示。服务不可用时先用 Xcode 完成设备准备。
+只有明确说明可能向 Apple 发送设备开发者镜像票据并取得用户同意，才可执行原流程：
 
-`state` 只允许：`idle` / `connecting` / `active` / `stopping` / `error`
-
-| 状态 | 含义 |
-|---|---|
-| `connecting` | 正在建立 DVT 隧道 |
-| `active` | 已下发模拟坐标，保持中 |
-| `stopping` | 正在清除并关闭隧道 |
-| `idle` | 已停止 |
-| `error` | 失败，`error` 字段说明原因 |
-
-**禁止**在响应里出现任何 `hypertension_*`、`compatible`、`enabled` 之类的字段。
-
-## 自检
-
-从仓库根目录：
-
-```bash
-python -m assistant --engine-url http://127.0.0.1:8900 env
-python -m assistant --engine-url http://127.0.0.1:8900 devices
-python -m assistant --engine-url http://127.0.0.1:8900 check
-python -m assistant --engine-url http://127.0.0.1:8900 start --region hk
-python -m assistant --engine-url http://127.0.0.1:8900 stop
+```sh
+macos/.venv/bin/python -m location_studio_mac.app --worker dvt_prepare --allow-apple-ticket
 ```
 
-五条全部正常返回 = 接入完成。**助手核心不需要任何改动。**
+不请求 MFi 身份，不导入证书、私钥、配对记录；普通 DVT worker 沿用已有 sandbox-exec 沙箱。
 
-## 测试要求
+### 蓝点未移动与恢复缓慢
 
-在 `macos/` 内至少覆盖：
+蓝点未移动先查会话是否 active/剩余时间、线缆、解锁、地图定位/精确位置权限、当前位置刷新。
+只有合理且用户同意时，才建议切换定位服务约 10 秒；这可能使模拟失效，不保证测试成功。
+**不能因 set_sent、active、iAP2 ACK 或计时器就写“手机位置已成功”。**
 
-* 桥接能启动并响应 `/api/health`；
-* 无设备时 `/api/simulate` 返回 `409` 而非崩溃；
-* `state` 只输出合法枚举；
-* `stop` 之后回到 `idle`；
-* 响应与日志中不含设备标识符。
+停止后先回地图点当前位置，由用户确认；仍显示测试位置时，先断开 USB、等待更新、重开地图。
+若仍未恢复且用户同意，可进入设置→隐私与安全性→定位服务，关闭约 10 秒后重新开启，再核验。
+此为条件性排查，不是所有设备必做步骤，也不保证立即恢复。仍异常时考虑重启并复查或联系 Apple 支持。
+无论 clear 是否请求成功、idle、正常退出或强杀，都不能替代人工恢复确认。
 
-`tests/conftest.py` 里的假引擎可以直接复用为桩实现。
+### 健康 App 核验
 
-## 改动范围
+官方入口通常为：健康 App→右上角头像→健康核对清单（Health Checklist）→高血压通知。
+版本/语言可能有菜单差异。按系统提示如实核对资格和设置，不代填；用户可只报告设置结果，不披露健康状况。
+卡片不存在或无法设置可能有多种原因；逐项核对型号、系统、地区与资格，不推断唯一原因。
+[Apple 官方说明](https://support.apple.com/en-us/117296)与[地区可用性](https://www.apple.com/watchos/feature-availability/)为准。
+入口可见、设置完成、收到通知是不同状态；本工具不是血压计或诊断工具。
 
-* ✅ `macos/**`
-* ✅ `.github/workflows/` 新增 macOS job
-* ❌ `assistant/**`（契约已冻结；确需修改请先与 Windows Agent 确认并提 issue）
-* ❌ `windows/**`
+## 验证与来源
 
-全部改动通过 PR 合并，未经维护者确认不得合并到 `main`。
+```sh
+cd macos
+uv run --no-sync pytest -q
+# 公共助手测试从根目录：
+# macos/.venv/bin/python -m pytest tests -q
+```
+
+来源 `ios-location-studio feat/macos-iap2 @ 9f978d21370ad4d67ff9f4d59d0c0f1e254c9b55`。
+原 DVT、Engine、worker 与完整 accessory-location vendor 保留。旧 app.py 为参考 GUI，不是新助手入口。
+iAP2 仅实验，不默认启用，不把 ACK 当作地图采纳证据。LICENSE 与版权声明不得删除或混入 MIT 模块。
+HTTP 进程边界不应被当成最终法律结论；发行者仍须履行 GPL 对应源码与声明义务。
+历史证据见 INTEGRATION_TEST_REPORT.md；本轮审核与 V1.1 未完成项见 V1_1_VALIDATION.md。
+不上传设备标识、原始日志、票据、健康信息、私钥或真实位置。
