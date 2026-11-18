@@ -24,9 +24,12 @@ Apple Watch **高血压通知**兼容性与设置测试助手。
 
 **一句提示词就够：**
 
-> 读 https://github.com/YEZH0/watch-hypertension-assistant 的 `AGENTS.md`，
-> 按里面的 0–8 阶段带我走完整个流程。每一步都要先告诉我手机上该做什么，
-> 等我明确回答之后再继续。
+> 读 https://github.com/YEZH0/watch-hypertension-assistant 的 `AGENTS.md`。
+> 先照「前置 · 先把项目装到用户电脑上」把我电脑装好，再按 0–8 阶段带我走完：
+> 安装 → 连手机 → 我在地图上确认蓝点变了 → 我在健康 App 里核验 → 确认位置已恢复。
+> 每一步都要先告诉我手机上该做什么，等我明确回答之后再继续。
+
+这五段缺一不可，其中三段只有你本人能做（基线、蓝点、恢复）。
 
 仓库里没有任何需要你去执行的神秘远程脚本：所有命令都是本仓库的
 `python -m assistant …` 子命令，安装只依赖 `pyproject.toml` 里固定版本的 `pytest`/`ruff`。
@@ -214,7 +217,7 @@ windows/              Windows 适配器说明（复用 DVT 引擎）
 macos/                macOS 子项目：引擎、界面与测试（GPL-3.0-only，自带 pyproject）
 agent/                Windows / Mac 两套 AI Agent 提示词
 docs/                 快速开始、教程、FAQ、架构、依赖、许可边界、适配器契约、真机实测
-tests/                自动化测试（148 项，跨 py3.11–3.13 × Windows/Ubuntu，见 CI）
+tests/                自动化测试（155 项，跨 py3.11–3.13 × Windows/Ubuntu，见 CI）
 ```
 
 文档索引见 [docs/README.md](docs/README.md)。

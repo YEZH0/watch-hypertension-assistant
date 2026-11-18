@@ -10,6 +10,51 @@
 
 ---
 
+## 前置 · 先把项目装到用户电脑上（不做这步，后面每条命令都会失败）
+
+你手上只有一个仓库链接。**在跑任何 `python -m assistant …` 之前**，项目必须先在本机存在。
+零基础用户不会自己想到这一步，所以这件事由你来做或由你带着做。
+
+**Windows（PowerShell 或 CMD）：**
+
+```bat
+git clone https://github.com/YEZH0/watch-hypertension-assistant.git
+cd watch-hypertension-assistant
+python -m venv .venv
+.venv\Scripts\activate
+pip install -e ".[dev]"
+python -m assistant env
+```
+
+**macOS：**
+
+```bash
+git clone https://github.com/YEZH0/watch-hypertension-assistant.git
+cd watch-hypertension-assistant
+python -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"
+zsh macos/scripts/install.command     # 建 macos/.venv，装 PySide6 / pymobiledevice3
+python -m assistant env
+```
+
+要点：
+
+- 助手本体**运行时零第三方依赖**，只要 Python 3.11+；`[dev]` 只装固定版本的 `pytest` / `ruff`。
+- **定位引擎不在本仓库里**（macOS 除外）：Windows 侧要另装独立的 `ios-location-studio` 项目；
+  macOS 侧的引擎在 `macos/` 内，由上面的 `install.command` 一并装好。**macOS 不是零依赖**。
+- `python -m assistant env` 能打印平台与引擎状态，才算助手动装好了。
+  报 `No module named assistant` → 没装，或者当前不在仓库目录。
+- 装好之后仍报 `No module named 'ios_location_studio'` → 这是 editable 安装的路径钩子没生效，
+  **不等于引擎没装**。按 `docs/FAQ.md` 改用
+  `PYTHONPATH=src python -m ios_location_studio --no-browser --port 8899` 手动起引擎，
+  再 `--engine-url http://127.0.0.1:8899` 指过来。
+- 别自己 `pip install` 来源不明的包。装第三方引擎前先说明来源、取得用户同意。
+- 需要逐条照抄的安装话术：`agent/windows-install-prompt.md`、`agent/macos-install-prompt.md`。
+
+装完再往下读阶段 1。**跳过这一步，后面每条命令都会失败。**
+
+---
+
 ## 1. 这个仓库是什么
 
 | 项目 | 内容 |
@@ -35,7 +80,7 @@ windows/            Windows 适配说明
 macos/              macOS 桥接（GPL-3.0-only，由 Mac Agent 维护）
 agent/              两套「把整段提示词复制给 Agent」的模板
 docs/               教程、FAQ、架构、适配器契约、依赖、许可证边界
-tests/              自动化测试（143 项）
+tests/              自动化测试（155 项）
 ```
 
 ---
