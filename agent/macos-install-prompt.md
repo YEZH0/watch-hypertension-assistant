@@ -16,8 +16,8 @@ docs/ADAPTER-CONTRACT.md、公共引导契约（如已发布）、macos/README.m
 职责与边界：
 - 尽量自动完成电脑侧可执行步骤；到手机操作节点必须暂停，等待用户真实回答。
 - 不修改 assistant/、windows/ 或公共根配置；不自创另一套 wizard 阶段/JSON 接口。
-- 本文 0–8 是 Issue #2 的用户旅程编号，不代表尚未发布的机器阶段 ID。
-- 只有取得稳定的公共 wizard 契约才执行对应 wizard；未提供时用下列真实命令逐步引导。
+- 公共阶段 ID 为 safety/environment/usb/baseline/region/simulate/health/restore/report；以实际 wizard --plan --json 为准。
+- 本分支已整合公共 wizard @ 0bc5750，按 macos/SHARED_FLOW.md 驱动；旧版本未提供 wizard 时按本文逐项引导，不伪造阶段。
 - 不向设备自动发送坐标，不循环重试，不自动延长到超过 180 秒；禁止自由坐标和地图选点。
 - DVT 为默认；iAP2 仅实验参考。active、set_sent、ACK 都不等于地图或健康功能已验证。
 - 不保存健康状况、具体真实位置、使用坐标记录、设备标识或原始日志，不索要 Apple ID、MFi 身份。
@@ -44,7 +44,7 @@ docs/ADAPTER-CONTRACT.md、公共引导契约（如已发布）、macos/README.m
   macos/.venv/bin/python -m location_studio_mac.doctor
 doctor 仅验证环境，不验证 USB、开发者模式、地图或健康资格。
 Mac 锁定依赖有 PySide6/pymobiledevice3 等；不能声称整个 Mac 安装零第三方依赖。
-若公共 wizard 已发布，按契约用：
+本分支已整合公共 wizard，先读 macos/SHARED_FLOW.md，并按实际 --plan/--json 输出逐阶段驱动：
   macos/.venv/bin/python -m location_studio_mac.assistant wizard
 Mac 入口只转发公共流程；若提示缺少 wizard，继续本文逐项交互，不要自动跳到 start。
 以下把 macos/.venv/bin/python -m location_studio_mac.assistant 简称为 MAC。
@@ -96,6 +96,7 @@ active 或 set_sent 仅是请求下发；只有用户确认才能记为“地图
 7 结束、超时、取消、异常与恢复（不得省略）
 无论地图结果如何，用户完成、取消、超时或异常均执行 MAC stop，再 MAC status。
 若桥接失联，关闭本次启动的桥接会话并明确“清理未确认”，不能把错误隐藏成成功。
+进入恢复阶段的第一条用户可见提示，必须完整显示：“若地图尚未恢复，请进入设置→隐私与安全性→定位服务，关闭并等待约 10 秒后重开，再回地图确认。”不能只写进日志或等用户追问。
 提示回苹果地图点击当前位置，由用户选择：已恢复/未恢复/不确定；idle 只说明引擎状态。
 先等用户报告；只有仍显示测试位置时，逐级提示断开 USB、等待 GPS 更新、重开地图。
 若仍未恢复且用户同意，再提示设置→隐私与安全性→定位服务，关闭约 10 秒后重开，重新核验地图。

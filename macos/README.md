@@ -8,9 +8,9 @@ GPL-3.0-only，无担保，许可证见 LICENSE；完整来源与依赖声明见
 
 V1 原接入位于 `feat/macos` / PR #1，尚未合并，保持独立。
 本 V1.1 分支 `feat/guided-flow-macos` 依赖 PR #1，已同步 main @ 1cec2a7。
-Issue #2 要求 Windows Agent 先发布公共 wizard 的阶段/交互契约；当前尚无该契约。
+已整合 Windows 引导分支 @ 0bc5750 的公共 wizard（仍未合并 main），使用同一阶段与 JSON 契约。
 本分支只转发已安装的公共 wizard，不自行实现状态机；缺失时明确退出且不发送坐标。
-现阶段可由 AI Agent 严格按 [完整操作提示词](../agent/macos-install-prompt.md)逐项引导，不能把此准备分支称为全平台 V1.1 验收完成。
+AI Agent 应严格按 [完整操作提示词](../agent/macos-install-prompt.md)驱动同一个公共 wizard，逐项等待手机确认。Mac CI 与尚未覆盖的实机场景不应被标为完成。
 根 README/AGENTS/公共教程的链接入口由 Windows Agent 负责协调，本分支不覆盖公共文件。
 
 ## 源码安装与检查
@@ -36,7 +36,7 @@ Mac 有 PySide6、pymobiledevice3 等依赖，不是“零第三方依赖”。�
 
 以下 0–8 对应 Issue #2 旅程编号，不是另立的机器阶段 ID。
 命令统一使用 `macos/.venv/bin/python -m location_studio_mac.assistant`，下文简称 MAC。
-公共契约发布后入口为 `MAC wizard`；现阶段缺失会明确提示，不退化为自动 start。
+入口为 `MAC wizard`；Agent 代跑使用 `MAC wizard --plan --json` 查看阶段，再以 `--answer` 提交用户真实确认。完整命令见 SHARED_FLOW.md。旧安装缺少 wizard 时明确提示，不退化为自动 start。
 
 | 阶段 | 操作与继续条件 |
 |---|---|
