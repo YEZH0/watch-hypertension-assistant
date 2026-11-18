@@ -44,7 +44,7 @@ Issues = "https://github.com/YEZH0/watch-hypertension-assistant/issues"
 packages = ["assistant"]
 
 [tool.hatch.build.targets.sdist]
-include = ["assistant", "tests", "docs", "README.md", "LICENSE", "NOTICE.md"]
+include = ["assistant", "tests", "docs", "agent", "AGENTS.md", "README.md", "LICENSE", "NOTICE.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
